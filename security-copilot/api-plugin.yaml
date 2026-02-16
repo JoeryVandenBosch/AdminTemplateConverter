@@ -13,9 +13,6 @@ Descriptor:
     AuthorizationEndpoint: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
     TokenEndpoint: https://login.microsoftonline.com/common/oauth2/v2.0/token
     Scopes: DeviceManagementConfiguration.ReadWrite.All Group.Read.All DeviceManagementRBAC.ReadWrite.All offline_access openid profile email
-  PrivacyUrl: https://admintemplate.intunestuff.com/#privacy
-  TermsOfUseUrl: https://admintemplate.intunestuff.com/#terms
-  ContactEmail: support@intunestuff.com
 
 SkillGroups:
   - Format: API
