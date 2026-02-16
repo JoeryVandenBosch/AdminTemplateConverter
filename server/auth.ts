@@ -33,6 +33,9 @@ function getAuthority(): string {
 }
 
 function getRedirectUri(): string {
+  if (process.env.APP_DOMAIN) {
+    return `https://${process.env.APP_DOMAIN}/api/auth/callback`;
+  }
   const base = process.env.REPLIT_DEV_DOMAIN
     ? `https://${process.env.REPLIT_DEV_DOMAIN}`
     : process.env.REPL_SLUG
