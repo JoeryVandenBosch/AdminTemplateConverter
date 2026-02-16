@@ -9,7 +9,7 @@ servers:
   - url: https://admintemplate.intunestuff.com/api
 
 security:
-  - AADDelegated: []
+  - OAuthFlow: []
 
 paths:
   /policies:
@@ -401,11 +401,14 @@ paths:
 
 components:
   securitySchemes:
-    AADDelegated:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: Microsoft Entra ID delegated authentication. Security Copilot handles token acquisition automatically.
+    OAuthFlow:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
+          tokenUrl: https://login.microsoftonline.com/common/oauth2/v2.0/token
+          scopes:
+            https://graph.microsoft.com/.default: Access Microsoft Graph API with all consented permissions
   schemas:
     AdminTemplatePolicy:
       type: object
