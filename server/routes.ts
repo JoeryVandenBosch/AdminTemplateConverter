@@ -536,8 +536,9 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/analytics", async (req, res) => {
-    const adminKey = req.query.key || req.headers["x-admin-key"];
-    const expectedKey = process.env.ADMIN_KEY;
+    const rawKey = req.query.key || req.headers["x-admin-key"];
+    const adminKey = typeof rawKey === "string" ? rawKey.trim() : Array.isArray(rawKey) ? String(rawKey[0]).trim() : "";
+    const expectedKey = (process.env.ADMIN_KEY || "").trim();
     if (!expectedKey || adminKey !== expectedKey) {
       return res.status(403).json({ message: "Unauthorized" });
     }
