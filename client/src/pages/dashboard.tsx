@@ -545,6 +545,27 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
     },
   });
 
+  const { data: settingsPreview, isLoading: previewLoading } = useQuery<{
+    totalSettings: number;
+    matchedSettings: number;
+    failedSettings: number;
+    details: Array<{
+      settingName: string;
+      categoryPath: string;
+      originalValue: string;
+      status: "matched" | "not_found" | "error";
+      confidence?: "high" | "medium" | "low";
+      mappedTo?: string;
+      error?: string;
+    }>;
+  }>({
+    queryKey: ["/api/policies", policy.id, "preview-conversion"],
+    queryFn: async () => {
+      const res = await apiRequest("POST", `/api/policies/${policy.id}/preview-conversion`);
+      return res.json();
+    },
+  });
+
   const hasFilterModifications = Object.keys(copiedFilterOverrides).length > 0 || removedCopiedFilters.size > 0;
   const convertMutation = useMutation({
     mutationFn: async () => {
@@ -764,6 +785,90 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                   placeholder="Enter a description"
                   data-testid="input-new-description"
                 />
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <p className="text-sm font-medium flex items-center gap-1">
+                  <Settings2 className="h-4 w-4" /> Settings Transfer Preview
+                </p>
+
+                {previewLoading ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Analyzing settings for matching definitions...
+                    </div>
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-10 w-full rounded-md" />
+                    ))}
+                  </div>
+                ) : settingsPreview ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3 flex-wrap text-xs">
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {settingsPreview.matchedSettings} matched
+                      </span>
+                      {settingsPreview.failedSettings > 0 && (
+                        <span className="flex items-center gap-1 text-destructive">
+                          <XCircle className="h-3.5 w-3.5" />
+                          {settingsPreview.failedSettings} not found
+                        </span>
+                      )}
+                      <span className="text-muted-foreground">
+                        {settingsPreview.totalSettings} total
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      {settingsPreview.details.map((detail, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-start gap-2 p-2 rounded-md bg-muted/50"
+                          data-testid={`setting-preview-${idx}`}
+                        >
+                          <div className="shrink-0 mt-0.5">
+                            {detail.status === "matched" ? (
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-destructive" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm leading-tight truncate">{detail.settingName}</p>
+                            <p className="text-xs text-muted-foreground truncate">{detail.categoryPath}</p>
+                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                              <Badge variant="outline" className="text-[9px]">
+                                {detail.originalValue}
+                              </Badge>
+                              {detail.status === "matched" && detail.confidence && (
+                                <Badge
+                                  variant={detail.confidence === "high" ? "secondary" : "outline"}
+                                  className={`text-[9px] ${detail.confidence === "high" ? "text-emerald-700 dark:text-emerald-300" : detail.confidence === "medium" ? "text-amber-700 dark:text-amber-300" : "text-orange-700 dark:text-orange-300"}`}
+                                >
+                                  {detail.confidence} confidence
+                                </Badge>
+                              )}
+                              {detail.status === "matched" && detail.mappedTo && (
+                                <span className="text-[10px] text-muted-foreground truncate">
+                                  → {detail.mappedTo}
+                                </span>
+                              )}
+                              {detail.status !== "matched" && detail.error && (
+                                <span className="text-[10px] text-destructive truncate">
+                                  {detail.error}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">Failed to load settings preview</p>
+                )}
               </div>
 
               <Separator />

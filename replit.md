@@ -67,6 +67,7 @@ The storage layer currently uses an in-memory implementation (`MemStorage`), but
 - `GET /api/filters` — List all Intune assignment filters in the tenant
 - `DELETE /api/policies/:id/assignments` — Delete all assignments from a policy
 - `POST /api/settings-catalog/:id/assignments` — Add/replace assignments on a Settings Catalog policy
+- `POST /api/policies/:id/preview-conversion` — Preview which settings will transfer successfully before converting
 - `POST /api/policies/convert` — Convert a policy to Settings Catalog format (body: policyId, newName, newDescription, includeAssignments)
 
 ## External Dependencies

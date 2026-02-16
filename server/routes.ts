@@ -167,6 +167,89 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/policies/:id/preview-conversion", async (req, res) => {
+    try {
+      const policyId = req.params.id;
+      log(`Starting conversion preview for policy ${policyId}`, "routes");
+
+      const settings = await getPolicySettings(policyId);
+
+      if (!settings || settings.length === 0) {
+        return res.json({
+          totalSettings: 0,
+          matchedSettings: 0,
+          failedSettings: 0,
+          details: [],
+        });
+      }
+
+      const details: any[] = [];
+
+      for (const setting of settings) {
+        const definition = setting.definition;
+        if (!definition) {
+          details.push({
+            settingName: "Unknown Setting",
+            categoryPath: "Unknown",
+            originalValue: setting.enabled ? "Enabled" : "Disabled",
+            status: "error",
+            error: "Could not retrieve setting definition",
+          });
+          continue;
+        }
+
+        try {
+          const matchResult = await findMatchingSettingDefinition(
+            definition.displayName,
+            definition.categoryPath || "",
+            definition.classType || "machine",
+            definition.definitionFile
+          );
+
+          if (matchResult) {
+            details.push({
+              settingName: definition.displayName,
+              categoryPath: definition.categoryPath || "Unknown",
+              originalValue: setting.enabled ? "Enabled" : "Disabled",
+              status: "matched",
+              confidence: matchResult.confidence,
+              mappedTo: matchResult.definition.displayName || matchResult.definition.id,
+            });
+          } else {
+            details.push({
+              settingName: definition.displayName,
+              categoryPath: definition.categoryPath || "Unknown",
+              originalValue: setting.enabled ? "Enabled" : "Disabled",
+              status: "not_found",
+              error: "No matching Settings Catalog definition found",
+            });
+          }
+        } catch (err: any) {
+          details.push({
+            settingName: definition.displayName,
+            categoryPath: definition.categoryPath || "Unknown",
+            originalValue: setting.enabled ? "Enabled" : "Disabled",
+            status: "error",
+            error: err.message,
+          });
+        }
+      }
+
+      const matchedCount = details.filter((d) => d.status === "matched").length;
+      const failedCount = details.filter((d) => d.status !== "matched").length;
+
+      res.json({
+        totalSettings: settings.length,
+        matchedSettings: matchedCount,
+        failedSettings: failedCount,
+        details,
+      });
+    } catch (error: any) {
+      log(`Preview conversion failed: ${error.message}`, "routes");
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/policies/convert", async (req, res) => {
     try {
       const parsed = convertPolicySchema.safeParse(req.body);
