@@ -1,7 +1,11 @@
 Descriptor:
   Name: IntuneStuff.PolicyConverter.API
   DisplayName: IntuneStuff Policy Converter API
-  Description: API plugin for converting deprecated Intune Administrative Template policies to Settings Catalog format. Provides skills for listing policies, previewing conversions, executing conversions, managing assignments, scope tags, and searching groups.
+  Description: >
+    Community API plugin for converting deprecated Microsoft Intune Administrative Template (Group Policy)
+    policies to the modern Settings Catalog format. Provides skills for listing policies, previewing
+    conversions, executing conversions, managing assignments, scope tags, and searching Azure AD groups.
+    Works with any Microsoft 365 tenant — no app registration required.
   SupportedAuthTypes:
     - OAuthAuthorizationCodeFlow
   Authorization:
@@ -9,6 +13,9 @@ Descriptor:
     AuthorizationEndpoint: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
     TokenEndpoint: https://login.microsoftonline.com/common/oauth2/v2.0/token
     Scopes: DeviceManagementConfiguration.ReadWrite.All Group.Read.All DeviceManagementRBAC.ReadWrite.All offline_access openid profile email
+  PrivacyUrl: https://admintemplate.intunestuff.com/#privacy
+  TermsOfUseUrl: https://admintemplate.intunestuff.com/#terms
+  ContactEmail: support@intunestuff.com
 
 SkillGroups:
   - Format: API

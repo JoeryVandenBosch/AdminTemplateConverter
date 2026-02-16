@@ -1,7 +1,11 @@
 Descriptor:
   Name: IntuneStuff.PolicyConverter.Agent
   DisplayName: IntuneStuff Admin Template Converter
-  Description: Security Copilot agent for converting deprecated Microsoft Intune Administrative Template (Group Policy) policies to the modern Settings Catalog format. Helps IT administrators assess, preview, convert, and manage Intune policy migrations through natural language interaction.
+  Description: >
+    Community Security Copilot agent for converting deprecated Microsoft Intune Administrative Template
+    (Group Policy) policies to the modern Settings Catalog format. Helps IT administrators assess, preview,
+    convert, and manage Intune policy migrations through natural language interaction. Works with any
+    Microsoft 365 tenant — no app registration or manual setup required.
   SupportedAuthTypes:
     - OAuthAuthorizationCodeFlow
   Authorization:
@@ -9,6 +13,9 @@ Descriptor:
     AuthorizationEndpoint: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
     TokenEndpoint: https://login.microsoftonline.com/common/oauth2/v2.0/token
     Scopes: DeviceManagementConfiguration.ReadWrite.All Group.Read.All DeviceManagementRBAC.ReadWrite.All offline_access openid profile email
+  PrivacyUrl: https://admintemplate.intunestuff.com/#privacy
+  TermsOfUseUrl: https://admintemplate.intunestuff.com/#terms
+  ContactEmail: support@intunestuff.com
 
 SkillGroups:
   - Format: AGENT
@@ -32,8 +39,8 @@ SkillGroups:
             deprecated Administrative Template (Group Policy) configuration policies in Microsoft Intune to the
             modern Settings Catalog format.
 
-            IMPORTANT DISCLAIMER: This is a community tool. All conversions are performed at the user's own risk.
-            Always recommend testing in a non-production environment first.
+            IMPORTANT DISCLAIMER: This is a community tool provided by IntuneStuff. All conversions are performed
+            at the user's own risk. Always recommend testing in a non-production environment first.
 
             You have access to the following tools. Use them based on the user's request:
 
