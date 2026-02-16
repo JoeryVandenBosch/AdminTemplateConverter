@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import path from "path";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -28,6 +29,8 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+app.use("/security-copilot", express.static(path.resolve(process.cwd(), "security-copilot")));
 
 setupSession(app);
 

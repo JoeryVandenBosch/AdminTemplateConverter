@@ -1,0 +1,645 @@
+openapi: 3.0.0
+
+info:
+  title: IntuneStuff Policy Converter API
+  description: API for converting deprecated Microsoft Intune Administrative Template policies to Settings Catalog format. This API connects to Microsoft Graph API on behalf of the authenticated user to read existing policies, analyze settings, find matching Settings Catalog definitions, and create converted policies.
+  version: "v1"
+
+servers:
+  - url: https://admintemplate.intunestuff.com/api
+
+paths:
+  /policies:
+    get:
+      operationId: listAdminTemplatePolicies
+      summary: List all Administrative Template (Group Policy) configuration policies in the tenant
+      description: Retrieves all deprecated Administrative Template policies from Intune. Returns policy id, displayName, description, creation/modification dates, and assignment counts.
+      responses:
+        "200":
+          description: Array of Administrative Template policies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminTemplatePolicy"
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+
+  /policies/{policyId}/settings:
+    get:
+      operationId: getPolicySettings
+      summary: Get all configured settings for a specific Administrative Template policy
+      description: Retrieves the list of settings configured in the specified Administrative Template policy, including their enabled/disabled state, definition details, and presentation values.
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema:
+            type: string
+          description: The ID of the Administrative Template policy
+      responses:
+        "200":
+          description: Array of policy settings with definitions and values
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PolicySetting"
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+
+  /policies/{policyId}/assignments:
+    get:
+      operationId: getPolicyAssignments
+      summary: Get raw assignments for a specific Administrative Template policy
+      description: Retrieves the assignment targets (groups, all users, all devices, exclusions) for the specified policy.
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema:
+            type: string
+          description: The ID of the Administrative Template policy
+      responses:
+        "200":
+          description: Array of assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Assignment"
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+    delete:
+      operationId: deletePolicyAssignments
+      summary: Remove all assignments from an Administrative Template policy
+      description: Deletes all group and user assignments from the specified Administrative Template policy. Useful for cleaning up before deleting the policy.
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema:
+            type: string
+          description: The ID of the Administrative Template policy
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+
+  /policies/{policyId}/assignments/resolve:
+    post:
+      operationId: resolveAssignments
+      summary: Resolve assignments with human-readable group and filter names
+      description: Takes the assignments of a policy and resolves group IDs to display names and filter IDs to filter details. Returns a user-friendly list showing target types, group names, and filter information.
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema:
+            type: string
+          description: The ID of the Administrative Template policy
+      responses:
+        "200":
+          description: Array of resolved assignments with display names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ResolvedAssignment"
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+
+  /policies/{policyId}/preview-conversion:
+    post:
+      operationId: previewConversion
+      summary: Preview which settings can be converted before actually converting
+      description: Analyzes each setting in the Administrative Template policy and checks if a matching Settings Catalog definition exists. Returns a detailed breakdown of which settings will convert successfully, which cannot be mapped, and the overall match rate. Does not create any policies.
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema:
+            type: string
+          description: The ID of the Administrative Template policy to preview
+      responses:
+        "200":
+          description: Conversion preview results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversionPreview"
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+
+  /policies/convert:
+    post:
+      operationId: convertPolicy
+      summary: Convert an Administrative Template policy to Settings Catalog format
+      description: Converts the specified Administrative Template policy to a new Settings Catalog policy. Maps each setting to its Settings Catalog equivalent, creates the new policy in the tenant, and optionally transfers assignments. Settings that cannot be mapped or are rejected by the Graph API are skipped, and the policy is created with all valid settings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConvertPolicyRequest"
+      responses:
+        "200":
+          description: Conversion result with details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversionResult"
+        "400":
+          description: Invalid request body
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+
+  /policies/{policyId}:
+    delete:
+      operationId: deleteAdminTemplatePolicy
+      summary: Permanently delete an Administrative Template policy
+      description: Permanently deletes the specified Administrative Template policy from the Intune tenant. This action cannot be undone. Typically used after a successful conversion to clean up the deprecated policy.
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema:
+            type: string
+          description: The ID of the Administrative Template policy to delete
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+
+  /settings-catalog/{policyId}/assignments:
+    post:
+      operationId: assignSettingsCatalogPolicy
+      summary: Add or replace assignments on a Settings Catalog policy
+      description: Sets the assignments (target groups, all users, all devices, exclusions) on a Settings Catalog policy. Used to transfer assignments from the old Administrative Template policy to the newly converted Settings Catalog policy.
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema:
+            type: string
+          description: The ID of the Settings Catalog policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignPolicyRequest"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Invalid request body
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+
+  /groups/search:
+    get:
+      operationId: searchAzureADGroups
+      summary: Search Azure AD groups by name
+      description: Searches for Azure AD groups matching the provided query string. Requires at least 2 characters. Returns group id, displayName, and membershipRule.
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema:
+            type: string
+            minLength: 2
+          description: Search query (minimum 2 characters)
+      responses:
+        "200":
+          description: Array of matching groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AzureADGroup"
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+
+  /filters:
+    get:
+      operationId: listAssignmentFilters
+      summary: List all Intune assignment filters in the tenant
+      description: Retrieves all assignment filters configured in the tenant, including their display names, platforms, and filter rules.
+      responses:
+        "200":
+          description: Array of assignment filters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AssignmentFilter"
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+
+  /scope-tags:
+    get:
+      operationId: listScopeTags
+      summary: List all role scope tags in the tenant
+      description: Retrieves all Intune role scope tags, including the built-in Default tag and any custom tags.
+      responses:
+        "200":
+          description: Array of scope tags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScopeTag"
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+    post:
+      operationId: createScopeTag
+      summary: Create a new role scope tag
+      description: Creates a new role scope tag in the tenant with the specified display name and optional description.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateScopeTagRequest"
+      responses:
+        "200":
+          description: The created scope tag
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScopeTag"
+        "400":
+          description: Invalid request
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+
+  /scope-tags/{tagId}:
+    delete:
+      operationId: deleteScopeTag
+      summary: Delete a role scope tag
+      description: Permanently deletes the specified role scope tag. The built-in Default tag (id 0) cannot be deleted.
+      parameters:
+        - in: path
+          name: tagId
+          required: true
+          schema:
+            type: string
+          description: The ID of the scope tag to delete
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Cannot delete built-in Default tag
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+
+  /settings-catalog/{policyId}/scope-tags:
+    post:
+      operationId: updatePolicyScopeTags
+      summary: Update scope tags on a Settings Catalog policy
+      description: Sets the role scope tag IDs on a Settings Catalog policy. Replaces the current scope tags with the provided list.
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema:
+            type: string
+          description: The ID of the Settings Catalog policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateScopeTagsRequest"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Invalid request
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+
+  /tenant-info:
+    get:
+      operationId: getTenantInfo
+      summary: Get connected Azure tenant information
+      description: Returns information about the Azure AD tenant the authenticated user belongs to.
+      responses:
+        "200":
+          description: Tenant information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantInfo"
+        "401":
+          description: Not authenticated
+        "500":
+          description: Server error
+
+components:
+  schemas:
+    AdminTemplatePolicy:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique policy identifier
+        displayName:
+          type: string
+          description: Display name of the policy
+        description:
+          type: string
+          description: Description of the policy
+        createdDateTime:
+          type: string
+          description: When the policy was created
+        lastModifiedDateTime:
+          type: string
+          description: When the policy was last modified
+
+    PolicySetting:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether the setting is enabled or disabled
+        definition:
+          type: object
+          properties:
+            displayName:
+              type: string
+            categoryPath:
+              type: string
+            classType:
+              type: string
+        presentationValues:
+          type: array
+          items:
+            type: object
+
+    Assignment:
+      type: object
+      properties:
+        id:
+          type: string
+        target:
+          type: object
+
+    ResolvedAssignment:
+      type: object
+      properties:
+        id:
+          type: string
+        targetType:
+          type: string
+          description: "Type: Included Group, Excluded Group, All Devices, All Users"
+        targetName:
+          type: string
+          description: Human-readable name of the target
+        groupId:
+          type: string
+          nullable: true
+        filterType:
+          type: string
+          nullable: true
+        filterId:
+          type: string
+          nullable: true
+        filterDisplayName:
+          type: string
+          nullable: true
+
+    ConversionPreview:
+      type: object
+      properties:
+        totalSettings:
+          type: integer
+        matchedSettings:
+          type: integer
+        failedSettings:
+          type: integer
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              settingName:
+                type: string
+              categoryPath:
+                type: string
+              originalValue:
+                type: string
+              status:
+                type: string
+                enum: [matched, not_found, error]
+              confidence:
+                type: string
+              mappedTo:
+                type: string
+              error:
+                type: string
+
+    ConvertPolicyRequest:
+      type: object
+      required:
+        - policyId
+        - newName
+      properties:
+        policyId:
+          type: string
+          description: ID of the Administrative Template policy to convert
+        newName:
+          type: string
+          description: Name for the new Settings Catalog policy
+        newDescription:
+          type: string
+          description: Description for the new policy
+        includeAssignments:
+          type: boolean
+          description: Whether to copy assignments from the source policy
+          default: false
+
+    ConversionResult:
+      type: object
+      properties:
+        policyName:
+          type: string
+        status:
+          type: string
+          enum: [success, partial, failed]
+          description: "success = all settings converted, partial = some settings skipped, failed = no settings could be converted"
+        newPolicyId:
+          type: string
+        totalSettings:
+          type: integer
+        convertedSettings:
+          type: integer
+        failedSettings:
+          type: integer
+        skippedByApi:
+          type: integer
+          description: Number of settings that were mapped but rejected by the Graph API during creation
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              settingName:
+                type: string
+              categoryPath:
+                type: string
+              status:
+                type: string
+                enum: [converted, not_found, error, skipped]
+              error:
+                type: string
+              mappedTo:
+                type: string
+        error:
+          type: string
+
+    AssignPolicyRequest:
+      type: object
+      required:
+        - assignments
+      properties:
+        assignments:
+          type: array
+          items:
+            type: object
+            properties:
+              target:
+                type: object
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+
+    AzureADGroup:
+      type: object
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        membershipRule:
+          type: string
+          nullable: true
+
+    AssignmentFilter:
+      type: object
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        platform:
+          type: string
+        rule:
+          type: string
+
+    ScopeTag:
+      type: object
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+
+    CreateScopeTagRequest:
+      type: object
+      required:
+        - displayName
+      properties:
+        displayName:
+          type: string
+        description:
+          type: string
+
+    UpdateScopeTagsRequest:
+      type: object
+      required:
+        - roleScopeTagIds
+      properties:
+        roleScopeTagIds:
+          type: array
+          items:
+            type: string
+
+    TenantInfo:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        tenantId:
+          type: string
+        displayName:
+          type: string
+        verifiedDomains:
+          type: array
+          items:
+            type: string

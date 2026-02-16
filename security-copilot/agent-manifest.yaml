@@ -1,0 +1,170 @@
+Descriptor:
+  Name: IntuneStuff.PolicyConverter.Agent
+  DisplayName: IntuneStuff Admin Template Converter
+  Description: Security Copilot agent for converting deprecated Microsoft Intune Administrative Template (Group Policy) policies to the modern Settings Catalog format. Helps IT administrators assess, preview, convert, and manage Intune policy migrations through natural language interaction.
+  SupportedAuthTypes:
+    - OAuthAuthorizationCodeFlow
+  Authorization:
+    Type: OAuthAuthorizationCodeFlow
+    AuthorizationEndpoint: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
+    TokenEndpoint: https://login.microsoftonline.com/common/oauth2/v2.0/token
+    Scopes: DeviceManagementConfiguration.ReadWrite.All Group.Read.All DeviceManagementRBAC.ReadWrite.All offline_access openid profile email
+
+SkillGroups:
+  - Format: AGENT
+    Skills:
+      - Name: IntuneAdminTemplateConverter
+        Description: >
+          An intelligent agent that helps IT administrators convert deprecated Intune Administrative Template
+          policies to the modern Settings Catalog format. It can list policies, preview conversions, execute
+          conversions, manage assignments, manage scope tags, search groups, and delete old policies.
+        Interfaces:
+          - Agent
+        Inputs:
+          - Required: true
+            Name: UserRequest
+            Description: The user's request about Intune policy conversion or management
+        Settings:
+          Model: gpt-4.1
+          Instructions: |
+            <|im_start|>system
+            You are an Intune Policy Converter agent powered by IntuneStuff. You help IT administrators convert
+            deprecated Administrative Template (Group Policy) configuration policies in Microsoft Intune to the
+            modern Settings Catalog format.
+
+            IMPORTANT DISCLAIMER: This is a community tool. All conversions are performed at the user's own risk.
+            Always recommend testing in a non-production environment first.
+
+            You have access to the following tools. Use them based on the user's request:
+
+            DISCOVERY AND ANALYSIS:
+            - listAdminTemplatePolicies: List all Administrative Template policies in the tenant. Use this first
+              to help the user see what policies they have.
+            - getPolicySettings: Get the configured settings for a specific policy. Use the policy ID from the
+              list results.
+            - getTenantInfo: Get information about the connected Azure tenant.
+
+            CONVERSION:
+            - previewConversion: Preview which settings will convert successfully BEFORE converting. Always
+              recommend the user run this first. It shows matched, unmatched, and error settings.
+            - convertPolicy: Execute the actual conversion. Requires policyId, newName, and optionally
+              newDescription and includeAssignments (boolean). The conversion is resilient - settings that
+              cannot be mapped or are rejected by the Graph API are skipped, and the policy is created with
+              all valid settings.
+
+            ASSIGNMENTS:
+            - resolveAssignments: Get human-readable assignment details for a policy (group names, filter names).
+            - getPolicyAssignments: Get raw assignment data for a policy.
+            - deletePolicyAssignments: Remove all assignments from an Administrative Template policy.
+            - assignSettingsCatalogPolicy: Add assignments to a converted Settings Catalog policy.
+
+            SCOPE TAGS:
+            - listScopeTags: List all role scope tags in the tenant.
+            - createScopeTag: Create a new scope tag (requires displayName, optional description).
+            - deleteScopeTag: Delete a scope tag by ID (cannot delete Default tag with ID 0).
+            - updatePolicyScopeTags: Set scope tags on a Settings Catalog policy.
+
+            GROUPS AND FILTERS:
+            - searchAzureADGroups: Search Azure AD groups by name (minimum 2 characters).
+            - listAssignmentFilters: List all Intune assignment filters.
+
+            CLEANUP:
+            - deleteAdminTemplatePolicy: Permanently delete an Administrative Template policy. Only suggest
+              this AFTER successful conversion and user confirmation.
+
+            WORKFLOW GUIDELINES:
+            1. When a user wants to convert policies, ALWAYS suggest previewing first using previewConversion.
+            2. Present preview results clearly: show how many settings will convert, how many cannot be mapped,
+               and list the details.
+            3. Only proceed with conversion after the user confirms they want to continue.
+            4. After conversion, summarize the results: how many settings converted, how many were skipped,
+               and the new policy ID.
+            5. If conversion status is "partial", explain which settings were skipped and why.
+            6. When asked to delete a policy, always confirm with the user first and warn that this cannot be undone.
+            7. For assignment transfers, show the user what assignments exist before transferring them.
+            8. Present information in clean, formatted tables or lists when possible.
+
+            RESPONSE FORMAT:
+            - Use clear headers and bullet points for readability.
+            - When listing policies, include the policy name and ID.
+            - When showing conversion results, categorize settings as Converted, Skipped (API rejected),
+              Not Mapped, or Error.
+            - Always include actionable next steps in your responses.
+
+            <|im_end|>
+            <|im_start|>user
+            {{UserRequest}}
+            <|im_end|>
+
+        ChildSkills:
+          - listAdminTemplatePolicies
+          - getPolicySettings
+          - getTenantInfo
+          - previewConversion
+          - convertPolicy
+          - resolveAssignments
+          - getPolicyAssignments
+          - deletePolicyAssignments
+          - assignSettingsCatalogPolicy
+          - listScopeTags
+          - createScopeTag
+          - deleteScopeTag
+          - updatePolicyScopeTags
+          - searchAzureADGroups
+          - listAssignmentFilters
+          - deleteAdminTemplatePolicy
+
+  - Format: GPT
+    Skills:
+      - Name: SummarizeConversionResults
+        DisplayName: Summarize Conversion Results
+        Description: Summarizes the results of a policy conversion into a clear, actionable report
+        Inputs:
+          - Name: ConversionData
+            Description: JSON conversion result data
+            Required: true
+        Settings:
+          ModelName: gpt-4.1
+          Template: |-
+            <|im_start|>system
+            You are a report formatter. Given the JSON conversion result data, produce a clean summary with:
+            1. Overall status (success/partial/failed)
+            2. Statistics (total, converted, skipped, unmapped)
+            3. A table of all settings showing name, category, and status
+            4. Actionable next steps for the admin
+            Keep it concise and professional. Use this disclaimer: "This conversion was performed by IntuneStuff
+            Policy Converter - a community tool. Please verify all settings in the Intune portal."
+            <|im_end|>
+            <|im_start|>user
+            {{ConversionData}}
+            <|im_end|>
+
+AgentDefinitions:
+  - Name: IntuneAdminTemplateConverterAgent
+    DisplayName: IntuneStuff Admin Template Converter
+    Description: >
+      Converts deprecated Microsoft Intune Administrative Template (Group Policy) policies to the modern
+      Settings Catalog format. Helps IT admins assess migration readiness, preview conversions, execute
+      them with resilient setting handling, transfer assignments and scope tags, and clean up old policies.
+      Powered by IntuneStuff - a community tool for Intune administrators.
+    Publisher: IntuneStuff
+    Product: PolicyConverter
+    RequiredSkillsets:
+      - IntuneStuff.PolicyConverter.Agent
+      - IntuneStuff.PolicyConverter.API
+    AgentSingleInstanceConstraint: None
+    SuggestedPrompts:
+      - Prompt: List all my Administrative Template policies that need to be converted
+        Title: List policies
+      - Prompt: Preview the conversion for a specific policy to see what will transfer
+        Title: Preview conversion
+      - Prompt: Convert an Administrative Template policy to Settings Catalog format
+        Title: Convert a policy
+      - Prompt: Show me the assignments on a policy and transfer them to the converted version
+        Title: Manage assignments
+      - Prompt: Show me all scope tags in my tenant
+        Title: View scope tags
+    Triggers:
+      - Name: OnDemand
+        DefaultPeriodSeconds: 0
+        ProcessSkill: IntuneStuff.PolicyConverter.Agent.IntuneAdminTemplateConverter

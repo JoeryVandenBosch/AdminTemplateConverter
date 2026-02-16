@@ -1,0 +1,17 @@
+Descriptor:
+  Name: IntuneStuff.PolicyConverter.API
+  DisplayName: IntuneStuff Policy Converter API
+  Description: API plugin for converting deprecated Intune Administrative Template policies to Settings Catalog format. Provides skills for listing policies, previewing conversions, executing conversions, managing assignments, scope tags, and searching groups.
+  SupportedAuthTypes:
+    - OAuthAuthorizationCodeFlow
+  Authorization:
+    Type: OAuthAuthorizationCodeFlow
+    AuthorizationEndpoint: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
+    TokenEndpoint: https://login.microsoftonline.com/common/oauth2/v2.0/token
+    Scopes: DeviceManagementConfiguration.ReadWrite.All Group.Read.All DeviceManagementRBAC.ReadWrite.All offline_access openid profile email
+
+SkillGroups:
+  - Format: API
+    Settings:
+      OpenApiSpecUrl: https://admintemplate.intunestuff.com/security-copilot/openapi-spec.yaml
+      EndpointUrl: https://admintemplate.intunestuff.com/api

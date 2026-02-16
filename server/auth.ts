@@ -267,6 +267,26 @@ export async function refreshTokenIfNeeded(req: Request): Promise<string> {
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.substring(7);
+    fetch("https://graph.microsoft.com/v1.0/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((graphRes) => {
+        if (graphRes.ok) {
+          (req as any).bearerToken = token;
+          next();
+        } else {
+          res.status(401).json({ message: "Invalid or expired Bearer token." });
+        }
+      })
+      .catch(() => {
+        res.status(401).json({ message: "Token validation failed." });
+      });
+    return;
+  }
+
   if (!req.session.accessToken) {
     res.status(401).json({ message: "Not authenticated. Please sign in." });
     return;

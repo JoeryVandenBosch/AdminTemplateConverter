@@ -26,6 +26,9 @@ import { requireAuth, refreshTokenIfNeeded } from "./auth";
 import { trackEvent, getAnalyticsSummary } from "./analytics";
 
 async function getAccessToken(req: Request): Promise<string> {
+  if ((req as any).bearerToken) {
+    return (req as any).bearerToken;
+  }
   return refreshTokenIfNeeded(req);
 }
 

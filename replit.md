@@ -18,6 +18,7 @@ Preferred communication style: Simple, everyday language.
 - `shared/` — Shared types and schemas (used by both client and server)
 - `migrations/` — Drizzle database migrations
 - `script/` — Build scripts
+- `security-copilot/` — Microsoft Security Copilot agent manifests and OpenAPI spec
 
 ### Frontend Architecture
 - **Framework**: React with TypeScript
