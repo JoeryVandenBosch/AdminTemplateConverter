@@ -50,6 +50,8 @@ import {
   Plus,
   UserMinus,
   UserPlus,
+  Filter,
+  SlidersHorizontal,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type {
@@ -60,6 +62,7 @@ import type {
   PolicyAssignment,
   ResolvedAssignment,
   AzureGroup,
+  AssignmentFilter,
 } from "@shared/schema";
 
 function ConnectionStatus() {
@@ -299,6 +302,17 @@ function PolicyDetail({ policy, onClose, onConvert }: PolicyDetailProps) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm leading-tight truncate">{assignment.targetName}</p>
+                  {assignment.filterDisplayName && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <Filter className="h-2.5 w-2.5 shrink-0" />
+                      <span className="truncate">{assignment.filterDisplayName}</span>
+                      {assignment.filterType && (
+                        <Badge variant="outline" className="text-[9px] shrink-0 ml-1">
+                          {assignment.filterType === "include" ? "Include" : "Exclude"}
+                        </Badge>
+                      )}
+                    </p>
+                  )}
                 </div>
                 <Badge
                   variant={assignment.targetType === "Excluded Group" ? "destructive" : "secondary"}
@@ -409,6 +423,102 @@ function GroupSearch({ onSelectGroup, existingGroupIds }: { onSelectGroup: (grou
   );
 }
 
+function FilterPicker({ selectedFilterId, selectedFilterType, onSelect, onClear }: {
+  selectedFilterId: string | null;
+  selectedFilterType: "include" | "exclude" | null;
+  onSelect: (filterId: string, filterName: string, filterType: "include" | "exclude") => void;
+  onClear: () => void;
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+  const [filterMode, setFilterMode] = useState<"include" | "exclude">(selectedFilterType || "include");
+
+  const { data: filters, isLoading } = useQuery<AssignmentFilter[]>({
+    queryKey: ["/api/filters"],
+    enabled: showPicker,
+  });
+
+  if (selectedFilterId) {
+    return null;
+  }
+
+  return (
+    <div>
+      {!showPicker ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowPicker(true)}
+          className="text-xs text-muted-foreground"
+          data-testid="button-add-filter"
+        >
+          <Filter className="h-3 w-3 mr-1" />
+          Add Filter
+        </Button>
+      ) : (
+        <div className="space-y-2 p-2 rounded-md border bg-muted/30">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-xs font-medium flex items-center gap-1">
+              <Filter className="h-3 w-3" /> Select Filter
+            </p>
+            <div className="flex items-center gap-1">
+              <Badge
+                variant={filterMode === "include" ? "secondary" : "outline"}
+                className="text-[10px] cursor-pointer"
+                onClick={() => setFilterMode("include")}
+                data-testid="filter-mode-include"
+              >
+                Include
+              </Badge>
+              <Badge
+                variant={filterMode === "exclude" ? "destructive" : "outline"}
+                className="text-[10px] cursor-pointer"
+                onClick={() => setFilterMode("exclude")}
+                data-testid="filter-mode-exclude"
+              >
+                Exclude
+              </Badge>
+              <Button variant="ghost" size="icon" onClick={() => setShowPicker(false)} data-testid="button-close-filter-picker">
+                <XCircle className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+          {isLoading ? (
+            <div className="flex items-center gap-2 p-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Loading filters...
+            </div>
+          ) : filters && filters.length > 0 ? (
+            <ScrollArea className="max-h-[120px]">
+              <div className="space-y-1">
+                {filters.map((f) => (
+                  <div
+                    key={f.id}
+                    className="flex items-center gap-2 p-1.5 rounded-md cursor-pointer hover-elevate text-xs"
+                    onClick={() => {
+                      onSelect(f.id, f.displayName, filterMode);
+                      setShowPicker(false);
+                    }}
+                    data-testid={`filter-option-${f.id}`}
+                  >
+                    <SlidersHorizontal className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="leading-tight truncate">{f.displayName}</p>
+                      {f.platform && (
+                        <p className="text-muted-foreground truncate">{f.platform}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          ) : (
+            <p className="text-xs text-muted-foreground italic p-1">No assignment filters found in tenant</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
   const { toast } = useToast();
   const [newName, setNewName] = useState(
@@ -420,7 +530,14 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
   const [includeAssignments, setIncludeAssignments] = useState(false);
   const [result, setResult] = useState<ConversionResult | null>(null);
   const [showAddGroups, setShowAddGroups] = useState(false);
-  const [extraAssignments, setExtraAssignments] = useState<Array<{ groupId: string; groupName: string; type: "include" | "exclude" }>>([]);
+  const [extraAssignments, setExtraAssignments] = useState<Array<{
+    groupId: string;
+    groupName: string;
+    type: "include" | "exclude";
+    filterId: string | null;
+    filterName: string | null;
+    filterType: "include" | "exclude" | null;
+  }>>([]);
 
   const { data: resolvedAssignments } = useQuery<ResolvedAssignment[]>({
     queryKey: ["/api/policies", policy.id, "assignments", "resolve"],
@@ -456,11 +573,16 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
               }))
             : [];
 
-          const extraMapped = extraAssignments.map((ea) => ({
-            target: ea.type === "exclude"
+          const extraMapped = extraAssignments.map((ea) => {
+            const target: Record<string, any> = ea.type === "exclude"
               ? { "@odata.type": "#microsoft.graph.exclusionGroupAssignmentTarget", groupId: ea.groupId }
-              : { "@odata.type": "#microsoft.graph.groupAssignmentTarget", groupId: ea.groupId },
-          }));
+              : { "@odata.type": "#microsoft.graph.groupAssignmentTarget", groupId: ea.groupId };
+            if (ea.filterId && ea.filterType) {
+              target.deviceAndAppManagementAssignmentFilterId = ea.filterId;
+              target.deviceAndAppManagementAssignmentFilterType = ea.filterType;
+            }
+            return { target };
+          });
 
           const allAssignments = [...copiedAssignments, ...extraMapped];
 
@@ -537,7 +659,14 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
 
   const handleAddGroup = (group: AzureGroup) => {
     if (!extraAssignments.find((a) => a.groupId === group.id)) {
-      setExtraAssignments([...extraAssignments, { groupId: group.id, groupName: group.displayName, type: "include" }]);
+      setExtraAssignments([...extraAssignments, {
+        groupId: group.id,
+        groupName: group.displayName,
+        type: "include",
+        filterId: null,
+        filterName: null,
+        filterType: null,
+      }]);
     }
   };
 
@@ -548,6 +677,18 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
   const handleToggleExtraType = (groupId: string) => {
     setExtraAssignments(extraAssignments.map((a) =>
       a.groupId === groupId ? { ...a, type: a.type === "include" ? "exclude" : "include" } : a
+    ));
+  };
+
+  const handleSetFilter = (groupId: string, filterId: string, filterName: string, filterType: "include" | "exclude") => {
+    setExtraAssignments(extraAssignments.map((a) =>
+      a.groupId === groupId ? { ...a, filterId, filterName, filterType } : a
+    ));
+  };
+
+  const handleClearFilter = (groupId: string) => {
+    setExtraAssignments(extraAssignments.map((a) =>
+      a.groupId === groupId ? { ...a, filterId: null, filterName: null, filterType: null } : a
     ));
   };
 
@@ -627,18 +768,31 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                     {resolvedAssignments.map((assignment) => (
                       <div
                         key={assignment.id}
-                        className="flex items-center gap-2 p-1.5 rounded-md bg-muted/50 text-sm"
+                        className="p-1.5 rounded-md bg-muted/50 text-sm"
                       >
-                        <div className={`shrink-0 ${assignment.targetType === "Excluded Group" ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
-                          <AssignmentTargetIcon targetType={assignment.targetType} />
+                        <div className="flex items-center gap-2">
+                          <div className={`shrink-0 ${assignment.targetType === "Excluded Group" ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
+                            <AssignmentTargetIcon targetType={assignment.targetType} />
+                          </div>
+                          <span className="flex-1 min-w-0 truncate">{assignment.targetName}</span>
+                          <Badge
+                            variant={assignment.targetType === "Excluded Group" ? "destructive" : "secondary"}
+                            className="text-[10px] shrink-0"
+                          >
+                            {assignment.targetType}
+                          </Badge>
                         </div>
-                        <span className="flex-1 min-w-0 truncate">{assignment.targetName}</span>
-                        <Badge
-                          variant={assignment.targetType === "Excluded Group" ? "destructive" : "secondary"}
-                          className="text-[10px] shrink-0"
-                        >
-                          {assignment.targetType}
-                        </Badge>
+                        {assignment.filterDisplayName && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5 pl-6">
+                            <Filter className="h-2.5 w-2.5 shrink-0" />
+                            <span className="truncate">{assignment.filterDisplayName}</span>
+                            {assignment.filterType && (
+                              <Badge variant="outline" className="text-[9px] shrink-0">
+                                {assignment.filterType === "include" ? "Include" : "Exclude"}
+                              </Badge>
+                            )}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -669,29 +823,58 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                       {extraAssignments.map((ea) => (
                         <div
                           key={ea.groupId}
-                          className="flex items-center gap-2 p-1.5 rounded-md bg-muted/50 text-sm"
+                          className="space-y-1 p-1.5 rounded-md bg-muted/50"
                           data-testid={`extra-assignment-${ea.groupId}`}
                         >
-                          <div className={`shrink-0 ${ea.type === "exclude" ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
-                            {ea.type === "exclude" ? <UserMinus className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
+                          <div className="flex items-center gap-2 text-sm">
+                            <div className={`shrink-0 ${ea.type === "exclude" ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
+                              {ea.type === "exclude" ? <UserMinus className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
+                            </div>
+                            <span className="flex-1 min-w-0 truncate">{ea.groupName}</span>
+                            <Badge
+                              variant={ea.type === "exclude" ? "destructive" : "secondary"}
+                              className="text-[10px] shrink-0 cursor-pointer"
+                              onClick={() => handleToggleExtraType(ea.groupId)}
+                              data-testid={`toggle-type-${ea.groupId}`}
+                            >
+                              {ea.type === "exclude" ? "Exclude" : "Include"}
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveExtra(ea.groupId)}
+                              data-testid={`remove-extra-${ea.groupId}`}
+                            >
+                              <XCircle className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
-                          <span className="flex-1 min-w-0 truncate">{ea.groupName}</span>
-                          <Badge
-                            variant={ea.type === "exclude" ? "destructive" : "secondary"}
-                            className="text-[10px] shrink-0 cursor-pointer"
-                            onClick={() => handleToggleExtraType(ea.groupId)}
-                            data-testid={`toggle-type-${ea.groupId}`}
-                          >
-                            {ea.type === "exclude" ? "Exclude" : "Include"}
-                          </Badge>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemoveExtra(ea.groupId)}
-                            data-testid={`remove-extra-${ea.groupId}`}
-                          >
-                            <XCircle className="h-3.5 w-3.5" />
-                          </Button>
+                          {ea.filterId && ea.filterName ? (
+                            <div className="flex items-center gap-1 pl-6 text-xs text-muted-foreground">
+                              <Filter className="h-2.5 w-2.5 shrink-0" />
+                              <span className="truncate">{ea.filterName}</span>
+                              <Badge variant="outline" className="text-[9px] shrink-0">
+                                {ea.filterType === "include" ? "Include" : "Exclude"}
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5 shrink-0"
+                                onClick={() => handleClearFilter(ea.groupId)}
+                                data-testid={`clear-filter-${ea.groupId}`}
+                              >
+                                <XCircle className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="pl-6">
+                              <FilterPicker
+                                selectedFilterId={ea.filterId}
+                                selectedFilterType={ea.filterType}
+                                onSelect={(fId, fName, fType) => handleSetFilter(ea.groupId, fId, fName, fType)}
+                                onClear={() => handleClearFilter(ea.groupId)}
+                              />
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

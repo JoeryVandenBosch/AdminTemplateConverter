@@ -11,6 +11,8 @@ import {
   deleteAdminTemplatePolicyAssignments,
   resolveGroupNames,
   searchGroups,
+  getAssignmentFilters,
+  resolveFilterNames,
   buildSettingsCatalogSetting,
 } from "./graphClient";
 import { convertPolicySchema } from "@shared/schema";
@@ -65,8 +67,14 @@ export async function registerRoutes(
       const groupIds = assignments
         .map((a: any) => a.target?.groupId)
         .filter(Boolean);
+      const filterIds = assignments
+        .map((a: any) => a.target?.deviceAndAppManagementAssignmentFilterId)
+        .filter(Boolean);
 
-      const groupNames = groupIds.length > 0 ? await resolveGroupNames(groupIds) : {};
+      const [groupNames, filterNames] = await Promise.all([
+        groupIds.length > 0 ? resolveGroupNames(groupIds) : Promise.resolve({} as Record<string, string>),
+        filterIds.length > 0 ? resolveFilterNames(filterIds) : Promise.resolve({} as Record<string, { displayName: string; platform: string; rule: string }>),
+      ]);
 
       const resolved = assignments.map((a: any) => {
         const target = a.target || {};
@@ -88,19 +96,33 @@ export async function registerRoutes(
           targetName = target.groupId ? groupNames[target.groupId] || target.groupId : "Unknown Group";
         }
 
+        const filterId = target.deviceAndAppManagementAssignmentFilterId || null;
+        const filterInfo = filterId ? filterNames[filterId] : null;
+
         return {
           id: a.id,
           targetType,
           targetName,
           groupId: target.groupId || null,
           filterType: target.deviceAndAppManagementAssignmentFilterType || null,
-          filterId: target.deviceAndAppManagementAssignmentFilterId || null,
+          filterId,
+          filterDisplayName: filterInfo?.displayName || null,
         };
       });
 
       res.json(resolved);
     } catch (error: any) {
       log(`Failed to resolve assignments: ${error.message}`, "routes");
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/filters", async (_req, res) => {
+    try {
+      const filters = await getAssignmentFilters();
+      res.json(filters);
+    } catch (error: any) {
+      log(`Failed to fetch assignment filters: ${error.message}`, "routes");
       res.status(500).json({ message: error.message });
     }
   });

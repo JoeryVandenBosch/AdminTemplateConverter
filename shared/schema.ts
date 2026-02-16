@@ -93,6 +93,7 @@ export interface ResolvedAssignment {
   groupId: string | null;
   filterType: string | null;
   filterId: string | null;
+  filterDisplayName: string | null;
 }
 
 export interface AzureGroup {
@@ -102,6 +103,15 @@ export interface AzureGroup {
   groupTypes: string[];
   mailEnabled: boolean;
   securityEnabled: boolean;
+}
+
+export interface AssignmentFilter {
+  id: string;
+  displayName: string;
+  description: string | null;
+  platform: string;
+  rule: string;
+  assignmentFilterManagementType?: string;
 }
 
 export interface TenantInfo {

@@ -64,6 +64,7 @@ The storage layer currently uses an in-memory implementation (`MemStorage`), but
 - `GET /api/policies/:id/assignments` — Get assignments for a specific policy
 - `POST /api/policies/:id/assignments/resolve` — Resolve assignments with group display names
 - `GET /api/groups/search?q=query` — Search Azure AD groups by name (requires Group.Read.All)
+- `GET /api/filters` — List all Intune assignment filters in the tenant
 - `DELETE /api/policies/:id/assignments` — Delete all assignments from a policy
 - `POST /api/settings-catalog/:id/assignments` — Add/replace assignments on a Settings Catalog policy
 - `POST /api/policies/convert` — Convert a policy to Settings Catalog format (body: policyId, newName, newDescription, includeAssignments)

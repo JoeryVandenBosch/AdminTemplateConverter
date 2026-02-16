@@ -423,6 +423,43 @@ export async function searchGroups(query: string): Promise<any[]> {
   }
 }
 
+export async function getAssignmentFilters(): Promise<any[]> {
+  try {
+    return await graphRequestAllPages(
+      `${GRAPH_BASE_URL}/deviceManagement/assignmentFilters?$select=id,displayName,description,platform,rule,assignmentFilterManagementType`
+    );
+  } catch (err: any) {
+    log(`Failed to fetch assignment filters: ${err.message}`, "graph");
+    return [];
+  }
+}
+
+export async function resolveFilterNames(
+  filterIds: string[]
+): Promise<Record<string, { displayName: string; platform: string; rule: string }>> {
+  const result: Record<string, { displayName: string; platform: string; rule: string }> = {};
+  const uniqueIds = Array.from(new Set(filterIds));
+
+  await Promise.all(
+    uniqueIds.map(async (id) => {
+      try {
+        const filter = await graphRequest(
+          `${GRAPH_BASE_URL}/deviceManagement/assignmentFilters/${id}?$select=id,displayName,platform,rule`
+        );
+        result[id] = {
+          displayName: filter.displayName || id,
+          platform: filter.platform || "",
+          rule: filter.rule || "",
+        };
+      } catch {
+        result[id] = { displayName: id, platform: "", rule: "" };
+      }
+    })
+  );
+
+  return result;
+}
+
 export async function deleteAdminTemplatePolicyAssignments(
   policyId: string
 ): Promise<void> {
