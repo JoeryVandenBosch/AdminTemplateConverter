@@ -10,9 +10,12 @@ Descriptor:
     - OAuthAuthorizationCodeFlow
   Authorization:
     Type: OAuthAuthorizationCodeFlow
+    ClientId: ""
+    ClientSecret: ""
     AuthorizationEndpoint: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
     TokenEndpoint: https://login.microsoftonline.com/common/oauth2/v2.0/token
     AuthorizationContentType: application/x-www-form-urlencoded
+    Scopes: https://graph.microsoft.com/.default offline_access
 
 SkillGroups:
   - Format: AGENT
