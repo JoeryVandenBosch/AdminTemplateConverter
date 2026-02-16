@@ -41,11 +41,16 @@ Use this approach to test the plugin in your own tenant before submitting to the
 5. Select **Security Copilot plugin**
 6. Upload `api-plugin.yaml` (or paste the URL: `https://admintemplate.intunestuff.com/security-copilot/api-plugin.yaml`)
 7. When prompted for OAuth configuration, fill in:
+   - **Configuration Level**: **For everyone in this workspace** (to share with your team) or **User only** (for personal testing)
    - **Client ID**: Your IntuneStuff multi-tenant Azure AD app Client ID (`AZURE_CLIENT_ID`)
    - **Client Secret**: Your IntuneStuff app Client Secret (`AZURE_CLIENT_SECRET`)
    - **Authorization Content Type**: `application/x-www-form-urlencoded` (pre-filled)
    - **Resource**: `https://graph.microsoft.com`
-8. Turn on the plugin toggle
+8. Click **Connect** to authenticate and verify the OAuth connection works
+   - If it shows "Connected", you're all set
+   - If it fails, double-check your Client ID, Client Secret, and Resource values
+   - **Note**: "Set up" only saves the credentials without testing them. Always use "Connect" to verify the connection.
+9. Turn on the plugin toggle
 
 > **Note**: The Client ID and Secret here are the **publisher's app credentials** — the same ones used by the IntuneStuff web app. End users who use the plugin in your workspace do not need to know these values.
 
@@ -55,8 +60,10 @@ Use this approach to test the plugin in your own tenant before submitting to the
 2. Choose **Anyone in this workspace**
 3. Select **Security Copilot plugin**
 4. Upload `agent-manifest.yaml` (or paste the URL: `https://admintemplate.intunestuff.com/security-copilot/agent-manifest.yaml`)
-5. Complete setup if prompted
-6. The agent will appear in **Active agents**
+5. When the setup screen appears with OAuth fields, click **Connect** to authenticate
+   - If it shows "Failed to connect", that's okay — the agent manifest uses the API plugin's OAuth connection from Step 1
+   - The agent will still work as long as the API plugin (Step 1) is connected successfully
+6. Turn on the agent toggle — it will appear in **Active agents**
 
 ### Step 3: Test the Agent
 
