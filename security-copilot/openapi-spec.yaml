@@ -9,7 +9,10 @@ servers:
   - url: https://admintemplate.intunestuff.com/api
 
 security:
-  - BearerAuth: []
+  - OAuth2:
+      - DeviceManagementConfiguration.ReadWrite.All
+      - Group.Read.All
+      - DeviceManagementRBAC.ReadWrite.All
 
 paths:
   /policies:
@@ -401,10 +404,16 @@ paths:
 
 components:
   securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+    OAuth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
+          tokenUrl: https://login.microsoftonline.com/common/oauth2/v2.0/token
+          scopes:
+            DeviceManagementConfiguration.ReadWrite.All: Read and write Intune device configuration policies
+            Group.Read.All: Read Azure AD groups
+            DeviceManagementRBAC.ReadWrite.All: Read and write Intune RBAC settings
   schemas:
     AdminTemplatePolicy:
       type: object
