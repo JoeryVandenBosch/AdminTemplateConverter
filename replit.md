@@ -28,7 +28,11 @@ Preferred communication style: Simple, everyday language.
 - **Styling**: Tailwind CSS with CSS variables for theming (light/dark mode support)
 - **Path Aliases**: `@/` maps to `client/src/`, `@shared/` maps to `shared/`
 
-The frontend is a single-page app with a Dashboard page as the main view. It uses a custom `ThemeProvider` for dark/light mode toggling with localStorage persistence.
+The frontend is a multi-page SPA with:
+- **Landing page** (`/`) — IntuneStuff branded intro with features, privacy info, and setup guide (`client/src/pages/landing.tsx`)
+- **Converter dashboard** (`/converter`) — Main policy conversion tool (`client/src/pages/dashboard.tsx`)
+- **Branding**: IntuneStuff gold/amber (#C9A961) primary, dark teal header/sidebar (HSL 195 25% 18%), Segoe UI font stack
+- Dark/light mode toggling with localStorage persistence via custom `ThemeProvider`.
 
 ### Backend Architecture
 - **Framework**: Express 5 (running on Node.js via tsx)

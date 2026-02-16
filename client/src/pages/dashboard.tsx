@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
+import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1812,9 +1813,11 @@ export default function Dashboard() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center h-9 w-9 rounded-md bg-primary text-primary-foreground">
-                <ArrowRightLeft className="h-4 w-4" />
-              </div>
+              <Link href="/">
+                <div className="flex items-center justify-center h-9 w-9 rounded-md border border-primary/40 cursor-pointer" data-testid="link-home">
+                  <Monitor className="h-4 w-4 text-primary" />
+                </div>
+              </Link>
               <div>
                 <h1 className="text-base font-semibold leading-tight text-sidebar-foreground">
                   Intune Policy Converter
