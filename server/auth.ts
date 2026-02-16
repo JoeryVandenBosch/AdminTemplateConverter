@@ -32,7 +32,11 @@ function getAuthority(): string {
     : "https://login.microsoftonline.com/common";
 }
 
-function getRedirectUri(): string {
+function getRedirectUri(req?: Request): string {
+  if (req?.headers.host) {
+    const protocol = req.headers["x-forwarded-proto"] || (req.secure ? "https" : "http");
+    return `${protocol}://${req.headers.host}/api/auth/callback`;
+  }
   if (process.env.APP_DOMAIN) {
     return `https://${process.env.APP_DOMAIN}/api/auth/callback`;
   }
@@ -47,6 +51,8 @@ function getRedirectUri(): string {
 export function setupSession(app: Express): void {
   const PgSession = connectPgSimple(session);
 
+  app.set("trust proxy", 1);
+
   app.use(
     session({
       store: new PgSession({
@@ -57,8 +63,9 @@ export function setupSession(app: Express): void {
       secret: process.env.SESSION_SECRET!,
       resave: false,
       saveUninitialized: false,
+      proxy: true,
       cookie: {
-        secure: process.env.NODE_ENV === "production",
+        secure: true,
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000,
         sameSite: "lax",
@@ -74,7 +81,7 @@ export function registerAuthRoutes(app: Express): void {
       return res.status(500).json({ message: "Azure Client ID not configured" });
     }
 
-    const redirectUri = getRedirectUri();
+    const redirectUri = getRedirectUri(req);
     const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
     req.session.oauthState = state;
@@ -123,7 +130,7 @@ export function registerAuthRoutes(app: Express): void {
     }
 
     try {
-      const redirectUri = getRedirectUri();
+      const redirectUri = getRedirectUri(req);
       const tokenUrl = `${getAuthority()}/oauth2/v2.0/token`;
 
       const body = new URLSearchParams({
