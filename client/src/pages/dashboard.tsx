@@ -56,6 +56,7 @@ import {
   Tag,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import logoImg from "@assets/Color_logo_with_background_1771246173380.png";
 import type {
   AdminTemplatePolicy,
   DefinitionValue,
@@ -1814,9 +1815,12 @@ export default function Dashboard() {
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3">
               <Link href="/">
-                <div className="flex items-center justify-center h-9 w-9 rounded-md border border-primary/40 cursor-pointer" data-testid="link-home">
-                  <Monitor className="h-4 w-4 text-primary" />
-                </div>
+                <img
+                  src={logoImg}
+                  alt="IntuneStuff"
+                  className="h-10 w-auto rounded cursor-pointer"
+                  data-testid="link-home"
+                />
               </Link>
               <div>
                 <h1 className="text-base font-semibold leading-tight text-sidebar-foreground">
@@ -1827,10 +1831,7 @@ export default function Dashboard() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-medium text-primary tracking-wider uppercase">IntuneStuff</span>
-              <ThemeToggle />
-            </div>
+            <ThemeToggle />
           </div>
         </div>
       </header>

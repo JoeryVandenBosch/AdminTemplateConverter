@@ -16,8 +16,8 @@ import {
   ServerOff,
   FileText,
   ExternalLink,
-  Monitor,
 } from "lucide-react";
+import logoImg from "@assets/Color_logo_with_background_1771246173380.png";
 
 export default function Landing() {
   return (
@@ -25,19 +25,19 @@ export default function Landing() {
       <header className="sticky top-0 z-50 border-b border-sidebar-border bg-sidebar text-sidebar-foreground">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center h-9 w-9 rounded-md border border-primary/40">
-                <Monitor className="h-4 w-4 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-sm font-bold leading-tight tracking-wider uppercase text-sidebar-foreground" data-testid="text-brand-name">
-                  Intune Stuff
-                </h1>
-                <p className="text-[10px] text-sidebar-foreground/50 tracking-widest uppercase">
-                  Microsoft Cloud & Enterprise Mobility
-                </p>
-              </div>
-            </div>
+            <a
+              href="https://intunestuff.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3"
+              data-testid="link-header-logo"
+            >
+              <img
+                src={logoImg}
+                alt="IntuneStuff Logo"
+                className="h-10 w-auto rounded"
+              />
+            </a>
             <div className="flex items-center gap-3">
               <a
                 href="https://intunestuff.com"
@@ -89,24 +89,18 @@ export default function Landing() {
               </div>
             </div>
             <div className="flex justify-center">
-              <div className="relative">
-                <div className="w-48 h-48 sm:w-56 sm:h-56 flex items-center justify-center">
-                  <div className="absolute inset-0 rounded-md border border-primary/20" />
-                  <div className="relative flex flex-col items-center gap-4">
-                    <div className="h-20 w-20 rounded-md border-2 border-primary/60 flex items-center justify-center">
-                      <Monitor className="h-10 w-10 text-primary/80" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-lg font-bold tracking-[0.2em] uppercase text-sidebar-foreground/90">
-                        Intune Stuff
-                      </p>
-                      <p className="text-[9px] tracking-[0.25em] uppercase text-primary/70 mt-1">
-                        Microsoft Cloud & Enterprise Mobility
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <a
+                href="https://intunestuff.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="link-hero-logo"
+              >
+                <img
+                  src={logoImg}
+                  alt="IntuneStuff - Microsoft Cloud & Enterprise Mobility"
+                  className="w-56 sm:w-72 h-auto rounded-md"
+                />
+              </a>
             </div>
           </div>
         </div>
@@ -284,12 +278,15 @@ export default function Landing() {
       <footer className="border-t bg-background py-8">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <Monitor className="h-4 w-4 text-primary" />
-              <span className="text-sm font-semibold tracking-wider uppercase">
-                Intune Stuff
-              </span>
-            </div>
+            <a
+              href="https://intunestuff.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2"
+              data-testid="link-footer-logo"
+            >
+              <img src={logoImg} alt="IntuneStuff" className="h-8 w-auto rounded" />
+            </a>
             <p className="text-xs text-muted-foreground">
               Microsoft Cloud & Enterprise Mobility Tools
             </p>
