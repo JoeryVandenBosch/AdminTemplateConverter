@@ -160,17 +160,6 @@ AgentDefinitions:
       - IntuneStuff.PolicyConverter.Agent
       - IntuneStuff.PolicyConverter.API
     AgentSingleInstanceConstraint: None
-    SuggestedPrompts:
-      - Prompt: List all my Administrative Template policies that need to be converted
-        Title: List policies
-      - Prompt: Preview the conversion for a specific policy to see what will transfer
-        Title: Preview conversion
-      - Prompt: Convert an Administrative Template policy to Settings Catalog format
-        Title: Convert a policy
-      - Prompt: Show me the assignments on a policy and transfer them to the converted version
-        Title: Manage assignments
-      - Prompt: Show me all scope tags in my tenant
-        Title: View scope tags
     Triggers:
       - Name: OnDemand
         DefaultPeriodSeconds: 0
