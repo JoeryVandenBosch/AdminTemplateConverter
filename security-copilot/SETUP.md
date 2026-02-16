@@ -7,12 +7,9 @@ This Security Copilot agent allows IT administrators to convert deprecated Intun
 ## Prerequisites
 
 - Microsoft Security Copilot access (M365 E5 or standalone SCU capacity)
-- Azure AD app registration with the following delegated permissions:
-  - `DeviceManagementConfiguration.ReadWrite.All`
-  - `Group.Read.All`
-  - `DeviceManagementRBAC.ReadWrite.All`
-  - `offline_access`, `openid`, `profile`, `email`
 - The IntuneStuff Policy Converter app deployed at `admintemplate.intunestuff.com`
+- A user with Intune Administrator role (or equivalent) in your tenant
+- Admin consent granted for the IntuneStuff Policy Converter in your organization (done automatically on first sign-in)
 
 ## Files Included
 
@@ -33,8 +30,8 @@ This Security Copilot agent allows IT administrators to convert deprecated Intun
 5. Select **Security Copilot plugin**
 6. Upload `api-plugin.yaml`
 7. Complete the OAuth setup when prompted:
-   - **Client ID**: Your Azure AD app's Client ID
-   - **Client Secret**: Your Azure AD app's Client Secret
+   - **Client ID**: The IntuneStuff multi-tenant app Client ID (same as `AZURE_CLIENT_ID`)
+   - **Client Secret**: The IntuneStuff app Client Secret (same as `AZURE_CLIENT_SECRET`)
 8. Turn on the plugin toggle
 
 ### Step 2: Upload the Agent Manifest
