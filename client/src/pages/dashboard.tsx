@@ -618,7 +618,7 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
     },
   });
 
-  const { data: settingsPreview, isLoading: previewLoading } = useQuery<{
+  const { data: settingsPreview, isLoading: previewLoading, isError: previewError, refetch: refetchPreview } = useQuery<{
     totalSettings: number;
     matchedSettings: number;
     failedSettings: number;
@@ -637,6 +637,9 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
       const res = await apiRequest("POST", `/api/policies/${policy.id}/preview-conversion`);
       return res.json();
     },
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+    staleTime: 5 * 60 * 1000,
   });
 
   const hasFilterModifications = Object.keys(copiedFilterOverrides).length > 0 || removedCopiedFilters.size > 0;
@@ -890,6 +893,9 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       Analyzing settings for matching definitions...
                     </div>
+                    <p className="text-xs text-muted-foreground" data-testid="text-preview-loading-hint">
+                      This may take a while depending on the number of settings configured in the policy. Each setting is matched against the Settings Catalog definitions.
+                    </p>
                     {[1, 2, 3].map((i) => (
                       <Skeleton key={i} className="h-10 w-full rounded-md" />
                     ))}
@@ -956,8 +962,21 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                       ))}
                     </div>
                   </div>
+                ) : previewError ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-xs text-destructive italic" data-testid="text-preview-error">Failed to load settings preview</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => refetchPreview()}
+                      data-testid="button-retry-preview"
+                    >
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                      Retry
+                    </Button>
+                  </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground italic">Failed to load settings preview</p>
+                  <p className="text-xs text-muted-foreground italic">No preview available</p>
                 )}
               </div>
 
