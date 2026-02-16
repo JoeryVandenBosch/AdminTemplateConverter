@@ -302,17 +302,21 @@ function PolicyDetail({ policy, onClose, onConvert }: PolicyDetailProps) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm leading-tight truncate">{assignment.targetName}</p>
-                  {assignment.filterDisplayName && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                      <Filter className="h-2.5 w-2.5 shrink-0" />
-                      <span className="truncate">{assignment.filterDisplayName}</span>
-                      {assignment.filterType && (
-                        <Badge variant="outline" className="text-[9px] shrink-0 ml-1">
-                          {assignment.filterType === "include" ? "Include" : "Exclude"}
-                        </Badge>
-                      )}
-                    </p>
-                  )}
+                  <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                    <Filter className="h-2.5 w-2.5 shrink-0" />
+                    {assignment.filterDisplayName ? (
+                      <>
+                        <span className="truncate">{assignment.filterDisplayName}</span>
+                        {assignment.filterType && assignment.filterType !== "none" && (
+                          <Badge variant="outline" className="text-[9px] shrink-0 ml-1">
+                            {assignment.filterType === "include" ? "Include" : "Exclude"}
+                          </Badge>
+                        )}
+                      </>
+                    ) : (
+                      <span className="italic">No filter</span>
+                    )}
+                  </div>
                 </div>
                 <Badge
                   variant={assignment.targetType === "Excluded Group" ? "destructive" : "secondary"}
@@ -423,39 +427,30 @@ function GroupSearch({ onSelectGroup, existingGroupIds }: { onSelectGroup: (grou
   );
 }
 
-function FilterPicker({ selectedFilterId, selectedFilterType, onSelect, onClear }: {
-  selectedFilterId: string | null;
-  selectedFilterType: "include" | "exclude" | null;
+function CopiedFilterPicker({ assignmentId, onSelect }: {
+  assignmentId: string;
   onSelect: (filterId: string, filterName: string, filterType: "include" | "exclude") => void;
-  onClear: () => void;
 }) {
   const [showPicker, setShowPicker] = useState(false);
-  const [filterMode, setFilterMode] = useState<"include" | "exclude">(selectedFilterType || "include");
+  const [filterMode, setFilterMode] = useState<"include" | "exclude">("include");
 
   const { data: filters, isLoading } = useQuery<AssignmentFilter[]>({
     queryKey: ["/api/filters"],
     enabled: showPicker,
   });
 
-  if (selectedFilterId) {
-    return null;
-  }
-
   return (
-    <div>
+    <>
       {!showPicker ? (
-        <Button
-          variant="ghost"
-          size="sm"
+        <span
+          className="italic cursor-pointer hover:underline"
           onClick={() => setShowPicker(true)}
-          className="text-xs text-muted-foreground"
-          data-testid="button-add-filter"
+          data-testid={`add-filter-${assignmentId}`}
         >
-          <Filter className="h-3 w-3 mr-1" />
-          Add Filter
-        </Button>
+          No filter (click to add)
+        </span>
       ) : (
-        <div className="space-y-2 p-2 rounded-md border bg-muted/30">
+        <div className="space-y-2 p-2 rounded-md border bg-muted/30 mt-1 w-full">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <p className="text-xs font-medium flex items-center gap-1">
               <Filter className="h-3 w-3" /> Select Filter
@@ -465,7 +460,7 @@ function FilterPicker({ selectedFilterId, selectedFilterType, onSelect, onClear 
                 variant={filterMode === "include" ? "secondary" : "outline"}
                 className="text-[10px] cursor-pointer"
                 onClick={() => setFilterMode("include")}
-                data-testid="filter-mode-include"
+                data-testid={`filter-mode-include-${assignmentId}`}
               >
                 Include
               </Badge>
@@ -473,11 +468,11 @@ function FilterPicker({ selectedFilterId, selectedFilterType, onSelect, onClear 
                 variant={filterMode === "exclude" ? "destructive" : "outline"}
                 className="text-[10px] cursor-pointer"
                 onClick={() => setFilterMode("exclude")}
-                data-testid="filter-mode-exclude"
+                data-testid={`filter-mode-exclude-${assignmentId}`}
               >
                 Exclude
               </Badge>
-              <Button variant="ghost" size="icon" onClick={() => setShowPicker(false)} data-testid="button-close-filter-picker">
+              <Button variant="ghost" size="icon" onClick={() => setShowPicker(false)} data-testid={`close-filter-picker-${assignmentId}`}>
                 <XCircle className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -515,7 +510,7 @@ function FilterPicker({ selectedFilterId, selectedFilterType, onSelect, onClear 
           )}
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -538,6 +533,8 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
     filterName: string | null;
     filterType: "include" | "exclude" | null;
   }>>([]);
+  const [copiedFilterOverrides, setCopiedFilterOverrides] = useState<Record<string, { filterId: string; filterName: string; filterType: "include" | "exclude" }>>({});
+  const [removedCopiedFilters, setRemovedCopiedFilters] = useState<Set<string>>(new Set());
 
   const { data: resolvedAssignments } = useQuery<ResolvedAssignment[]>({
     queryKey: ["/api/policies", policy.id, "assignments", "resolve"],
@@ -547,9 +544,10 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
     },
   });
 
+  const hasFilterModifications = Object.keys(copiedFilterOverrides).length > 0 || removedCopiedFilters.size > 0;
   const convertMutation = useMutation({
     mutationFn: async () => {
-      const shouldBackendCopyAssignments = includeAssignments && extraAssignments.length === 0;
+      const shouldBackendCopyAssignments = includeAssignments && extraAssignments.length === 0 && !hasFilterModifications;
       const res = await apiRequest("POST", "/api/policies/convert", {
         policyId: policy.id,
         newName,
@@ -559,18 +557,30 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
       return (await res.json()) as ConversionResult;
     },
     onSuccess: async (data) => {
-      if (extraAssignments.length > 0 && data.newPolicyId && (data.status === "success" || data.status === "partial")) {
+      if ((extraAssignments.length > 0 || hasFilterModifications) && data.newPolicyId && (data.status === "success" || data.status === "partial")) {
         try {
           const copiedAssignments = includeAssignments && resolvedAssignments
-            ? resolvedAssignments.map((a) => ({
-                target: a.targetType === "All Devices"
+            ? resolvedAssignments.map((a) => {
+                const target: Record<string, any> = a.targetType === "All Devices"
                   ? { "@odata.type": "#microsoft.graph.allDevicesAssignmentTarget" }
                   : a.targetType === "All Users"
                     ? { "@odata.type": "#microsoft.graph.allLicensedUsersAssignmentTarget" }
                     : a.targetType === "Excluded Group"
                       ? { "@odata.type": "#microsoft.graph.exclusionGroupAssignmentTarget", groupId: a.groupId }
-                      : { "@odata.type": "#microsoft.graph.groupAssignmentTarget", groupId: a.groupId },
-              }))
+                      : { "@odata.type": "#microsoft.graph.groupAssignmentTarget", groupId: a.groupId };
+
+                if (copiedFilterOverrides[a.id]) {
+                  target.deviceAndAppManagementAssignmentFilterId = copiedFilterOverrides[a.id].filterId;
+                  target.deviceAndAppManagementAssignmentFilterType = copiedFilterOverrides[a.id].filterType;
+                } else if (removedCopiedFilters.has(a.id)) {
+                  // filter explicitly removed, don't include filter props
+                } else if (a.filterId && a.filterType && a.filterType !== "none") {
+                  target.deviceAndAppManagementAssignmentFilterId = a.filterId;
+                  target.deviceAndAppManagementAssignmentFilterType = a.filterType;
+                }
+
+                return { target };
+              })
             : [];
 
           const extraMapped = extraAssignments.map((ea) => {
@@ -591,13 +601,15 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
           });
 
           toast({
-            title: "Extra Assignments Added",
-            description: `Added ${extraAssignments.length} extra assignment(s) to the new policy.`,
+            title: "Assignments Updated",
+            description: extraAssignments.length > 0
+              ? `Added ${extraAssignments.length} extra assignment(s) to the new policy.`
+              : "Assignments with modified filters applied to the new policy.",
           });
         } catch (err: any) {
           toast({
             title: "Assignment Warning",
-            description: `Policy converted but failed to add extra assignments: ${err.message}`,
+            description: `Policy converted but failed to apply assignments: ${err.message}`,
             variant: "destructive",
           });
         }
@@ -692,6 +704,20 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
     ));
   };
 
+  const handleSetCopiedFilter = (assignmentId: string, filterId: string, filterName: string, filterType: "include" | "exclude") => {
+    setCopiedFilterOverrides((prev) => ({ ...prev, [assignmentId]: { filterId, filterName, filterType } }));
+    setRemovedCopiedFilters((prev) => { const next = new Set(prev); next.delete(assignmentId); return next; });
+  };
+
+  const handleClearCopiedFilter = (assignmentId: string) => {
+    setCopiedFilterOverrides((prev) => { const next = { ...prev }; delete next[assignmentId]; return next; });
+  };
+
+  const handleRemoveCopiedFilter = (assignmentId: string) => {
+    setRemovedCopiedFilters((prev) => new Set(prev).add(assignmentId));
+    setCopiedFilterOverrides((prev) => { const next = { ...prev }; delete next[assignmentId]; return next; });
+  };
+
   const existingGroupIds = [
     ...(resolvedAssignments?.map((a) => a.groupId).filter(Boolean) as string[] || []),
     ...extraAssignments.map((a) => a.groupId),
@@ -782,17 +808,51 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                             {assignment.targetType}
                           </Badge>
                         </div>
-                        {assignment.filterDisplayName && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5 pl-6">
-                            <Filter className="h-2.5 w-2.5 shrink-0" />
-                            <span className="truncate">{assignment.filterDisplayName}</span>
-                            {assignment.filterType && (
+                        <div className="flex items-center gap-1 mt-0.5 pl-6 text-xs text-muted-foreground">
+                          <Filter className="h-2.5 w-2.5 shrink-0" />
+                          {copiedFilterOverrides[assignment.id] ? (
+                            <>
+                              <span className="truncate">{copiedFilterOverrides[assignment.id].filterName}</span>
                               <Badge variant="outline" className="text-[9px] shrink-0">
-                                {assignment.filterType === "include" ? "Include" : "Exclude"}
+                                {copiedFilterOverrides[assignment.id].filterType === "include" ? "Include" : "Exclude"}
                               </Badge>
-                            )}
-                          </p>
-                        )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5 shrink-0"
+                                onClick={() => handleClearCopiedFilter(assignment.id)}
+                                data-testid={`clear-copied-filter-${assignment.id}`}
+                              >
+                                <XCircle className="h-3 w-3" />
+                              </Button>
+                            </>
+                          ) : assignment.filterDisplayName ? (
+                            <>
+                              <span className="truncate">{assignment.filterDisplayName}</span>
+                              {assignment.filterType && assignment.filterType !== "none" && (
+                                <Badge variant="outline" className="text-[9px] shrink-0">
+                                  {assignment.filterType === "include" ? "Include" : "Exclude"}
+                                </Badge>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5 shrink-0"
+                                onClick={() => handleRemoveCopiedFilter(assignment.id)}
+                                data-testid={`remove-copied-filter-${assignment.id}`}
+                              >
+                                <XCircle className="h-3 w-3" />
+                              </Button>
+                            </>
+                          ) : removedCopiedFilters.has(assignment.id) ? (
+                            <span className="italic">Removed</span>
+                          ) : (
+                            <CopiedFilterPicker
+                              assignmentId={assignment.id}
+                              onSelect={(fId, fName, fType) => handleSetCopiedFilter(assignment.id, fId, fName, fType)}
+                            />
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -848,33 +908,31 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                               <XCircle className="h-3.5 w-3.5" />
                             </Button>
                           </div>
-                          {ea.filterId && ea.filterName ? (
-                            <div className="flex items-center gap-1 pl-6 text-xs text-muted-foreground">
-                              <Filter className="h-2.5 w-2.5 shrink-0" />
-                              <span className="truncate">{ea.filterName}</span>
-                              <Badge variant="outline" className="text-[9px] shrink-0">
-                                {ea.filterType === "include" ? "Include" : "Exclude"}
-                              </Badge>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-5 w-5 shrink-0"
-                                onClick={() => handleClearFilter(ea.groupId)}
-                                data-testid={`clear-filter-${ea.groupId}`}
-                              >
-                                <XCircle className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <div className="pl-6">
-                              <FilterPicker
-                                selectedFilterId={ea.filterId}
-                                selectedFilterType={ea.filterType}
+                          <div className="flex items-center gap-1 pl-6 text-xs text-muted-foreground">
+                            <Filter className="h-2.5 w-2.5 shrink-0" />
+                            {ea.filterId && ea.filterName ? (
+                              <>
+                                <span className="truncate">{ea.filterName}</span>
+                                <Badge variant="outline" className="text-[9px] shrink-0">
+                                  {ea.filterType === "include" ? "Include" : "Exclude"}
+                                </Badge>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-5 w-5 shrink-0"
+                                  onClick={() => handleClearFilter(ea.groupId)}
+                                  data-testid={`clear-filter-${ea.groupId}`}
+                                >
+                                  <XCircle className="h-3 w-3" />
+                                </Button>
+                              </>
+                            ) : (
+                              <CopiedFilterPicker
+                                assignmentId={ea.groupId}
                                 onSelect={(fId, fName, fType) => handleSetFilter(ea.groupId, fId, fName, fType)}
-                                onClear={() => handleClearFilter(ea.groupId)}
                               />
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
