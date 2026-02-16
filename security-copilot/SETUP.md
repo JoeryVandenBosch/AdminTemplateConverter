@@ -77,6 +77,79 @@ Use this approach to test the plugin in your own tenant before submitting to the
 
 ---
 
+## Setting Up Scheduled Policy Scans
+
+The agent includes a **Scheduled Policy Scan** trigger that periodically checks your tenant for Administrative Template policies and generates a report with conversion options. No policies are converted automatically — the IT admin always decides.
+
+### How It Works
+
+1. The agent runs on a schedule (default: every 24 hours)
+2. It calls the API to list all Administrative Template policies in the tenant
+3. For each policy, it previews conversion readiness (which settings can map to Settings Catalog)
+4. It generates a summary report categorizing policies as:
+   - **Ready to convert** — all or most settings have matches
+   - **Partially convertible** — some settings can map, others cannot
+   - **Not convertible** — no matching Settings Catalog definitions
+5. The report includes prompts the admin can use to convert specific policies
+
+### Enabling the Schedule
+
+After uploading the agent manifest:
+
+1. In Security Copilot, go to **Agents** (or **Active agents** in the sidebar)
+2. Find **IntuneStuff Admin Template Converter**
+3. Click on the agent to open its settings
+4. Under **Triggers**, you will see:
+   - **OnDemand** — manual use (always active)
+   - **ScheduledPolicyScan** — periodic scan (default: every 24 hours / 86400 seconds)
+5. Toggle the **ScheduledPolicyScan** trigger ON
+   - The default scan interval is every 24 hours (86400 seconds)
+   - To change the frequency, modify `DefaultPollPeriodSeconds` in the agent manifest before uploading
+
+### What the Scan Report Looks Like
+
+When the scheduled scan runs, you will see a report like this in Security Copilot:
+
+```
+## Administrative Template Policy Scan Report
+
+Tenant: Contoso Corp
+Scan Date: 2025-02-16
+Total Policies Found: 5
+
+### Policies Ready to Convert
+| Policy Name           | Settings | Convertible | Action                                |
+|-----------------------|----------|-------------|---------------------------------------|
+| Chrome Browser Config | 12       | 12/12       | Say "convert policy Chrome Browser Config" |
+
+### Partially Convertible Policies
+| Policy Name        | Settings | Convertible | Unmapped | Action                                    |
+|--------------------|----------|-------------|----------|-------------------------------------------|
+| Edge Settings v2   | 8        | 6           | 2        | Say "preview conversion for Edge Settings v2" |
+
+### Policies That Cannot Be Converted
+| Policy Name      | Reason                                      |
+|------------------|---------------------------------------------|
+| Legacy GPO Rules | No matching Settings Catalog definitions    |
+```
+
+The admin can then respond with natural language like "Convert policy Chrome Browser Config" and the agent will handle the rest (with a preview step first).
+
+### Alternative: Azure Logic Apps Automation (Email Reports + Custom Schedules)
+
+For email notifications, specific scheduling (e.g., Mondays at 9 AM), or integrating with other workflows, use **Azure Logic Apps**:
+
+1. Create a **Logic App** in Azure Portal
+2. Add a **Recurrence** trigger (set your preferred schedule)
+3. Add the **Security Copilot** connector action: "Submit a Security Copilot prompt"
+4. Use the prompt: "Scan my tenant for Administrative Template policies and show me what can be converted"
+5. Add a **Send Email (V2)** action to forward the scan results to your team
+6. Optionally add Teams, ServiceNow, or Jira actions for ticketing
+
+This approach gives you full control over timing, email delivery, and integration with other IT workflows. The built-in scheduled trigger (above) is simpler but results only appear inside Security Copilot — Logic Apps lets you push them to email or other channels.
+
+---
+
 ## Agent Capabilities
 
 | Capability | Description |

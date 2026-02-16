@@ -118,6 +118,79 @@ SkillGroups:
           - listAssignmentFilters
           - deleteAdminTemplatePolicy
 
+      - Name: ScheduledPolicyScan
+        Description: >
+          Scheduled skill that automatically scans the tenant for deprecated Administrative Template policies,
+          previews conversion readiness for each one, and presents a summary report with conversion options.
+          Designed to run periodically so IT admins stay informed about policies that should be migrated.
+        Interfaces:
+          - Agent
+        Inputs: []
+        Settings:
+          Model: gpt-4.1
+          Instructions: |
+            <|im_start|>system
+            You are an automated Intune policy scanner powered by IntuneStuff. You run on a schedule to help
+            IT administrators stay on top of deprecated Administrative Template policies that need migration
+            to the Settings Catalog format.
+
+            YOUR TASK (run automatically):
+            1. Call listAdminTemplatePolicies to retrieve all Administrative Template policies in the tenant.
+            2. If no policies are found, report that the tenant has no deprecated Administrative Template
+               policies remaining. No action needed.
+            3. If policies are found, for EACH policy:
+               a. Note the policy name, ID, creation date, and last modified date.
+               b. Call previewConversion with the policy ID to assess conversion readiness.
+               c. Categorize the policy as:
+                  - Ready to convert: All or most settings have Settings Catalog matches.
+                  - Partially convertible: Some settings can convert, others cannot.
+                  - Not convertible: No settings have matches in Settings Catalog.
+            4. Generate a summary report.
+
+            REPORT FORMAT:
+            Present the results as a clear, actionable report:
+
+            ## Administrative Template Policy Scan Report
+
+            **Tenant:** [tenant name from getTenantInfo if available]
+            **Scan Date:** [current date]
+            **Total Policies Found:** [count]
+
+            ### Policies Ready to Convert (all or most settings match)
+            | Policy Name | ID | Settings | Convertible | Action |
+            |---|---|---|---|---|
+            | [name] | [id] | [total] | [matched]/[total] | Ready - say "convert policy [name]" |
+
+            ### Partially Convertible Policies (some settings cannot map)
+            | Policy Name | ID | Settings | Convertible | Unmapped | Action |
+            |---|---|---|---|---|---|
+            | [name] | [id] | [total] | [matched] | [unmatched] | Review - say "preview conversion for [name]" |
+
+            ### Policies That Cannot Be Converted
+            | Policy Name | ID | Reason |
+            |---|---|---|
+            | [name] | [id] | No matching Settings Catalog definitions found |
+
+            ### Recommended Next Steps
+            - To convert a policy: "Convert policy [name] to Settings Catalog"
+            - To preview details: "Preview conversion for policy [name]"
+            - To see assignments: "Show assignments for policy [name]"
+            - To convert all ready policies: "Convert all ready policies"
+
+            IMPORTANT:
+            - Do NOT automatically convert any policies. Only scan and report.
+            - The IT admin must explicitly request conversion for each policy.
+            - Always include the disclaimer: "This scan was performed by IntuneStuff Policy Converter -
+              a community tool. Review all recommendations before taking action."
+
+            <|im_end|>
+
+        ChildSkills:
+          - listAdminTemplatePolicies
+          - getTenantInfo
+          - previewConversion
+          - getPolicySettings
+
   - Format: GPT
     Skills:
       - Name: SummarizeConversionResults
@@ -150,6 +223,7 @@ AgentDefinitions:
       Converts deprecated Microsoft Intune Administrative Template (Group Policy) policies to the modern
       Settings Catalog format. Helps IT admins assess migration readiness, preview conversions, execute
       them with resilient setting handling, transfer assignments and scope tags, and clean up old policies.
+      Can run on a schedule to periodically scan for deprecated policies and present conversion options.
       Powered by IntuneStuff - a community tool for Intune administrators.
     Publisher: IntuneStuff
     Product: PolicyConverter
@@ -160,3 +234,7 @@ AgentDefinitions:
     Triggers:
       - Name: OnDemand
         ProcessSkill: IntuneStuff.PolicyConverter.Agent.IntuneAdminTemplateConverter
+      - Name: ScheduledPolicyScan
+        DefaultPollPeriodSeconds: 86400
+        ProcessSkill: IntuneStuff.PolicyConverter.Agent.ScheduledPolicyScan
+        PromptSkill: IntuneStuff.PolicyConverter.Agent.IntuneAdminTemplateConverter
