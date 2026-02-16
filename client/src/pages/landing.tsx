@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -157,58 +157,44 @@ export default function Landing() {
             </h3>
             <div className="w-12 h-0.5 bg-primary mx-auto mt-3" />
           </div>
-          <div className="grid md:grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <h4 className="text-lg font-semibold flex items-center gap-2">
-                <Shield className="h-5 w-5 text-primary" />
-                Azure App Registration
-              </h4>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                This tool requires an Azure AD (Entra ID) App Registration with
-                application-level permissions. It uses the OAuth2 client credentials
-                flow — no user sign-in is needed.
-              </p>
-              <div className="space-y-2 pl-1">
-                <p className="text-sm font-medium">Required API Permissions (Application):</p>
-                <ul className="space-y-1.5 text-sm text-muted-foreground">
-                  <PermissionItem name="DeviceManagementConfiguration.ReadWrite.All" description="Read & create policies" />
-                  <PermissionItem name="Group.Read.All" description="Resolve group names for assignments" />
-                  <PermissionItem name="DeviceManagementRBAC.ReadWrite.All" description="Manage scope tags" />
-                </ul>
-              </div>
-            </div>
-            <div className="space-y-4">
-              <h4 className="text-lg font-semibold flex items-center gap-2">
-                <FileText className="h-5 w-5 text-primary" />
-                Step-by-Step Setup
-              </h4>
-              <ol className="space-y-3 text-sm text-muted-foreground">
-                <li className="flex gap-2">
-                  <span className="font-semibold text-foreground shrink-0">1.</span>
-                  Go to <span className="font-medium text-foreground">Azure Portal &gt; App Registrations &gt; New Registration</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="font-semibold text-foreground shrink-0">2.</span>
-                  Name it (e.g., "IntuneStuff Policy Converter") and register
-                </li>
-                <li className="flex gap-2">
-                  <span className="font-semibold text-foreground shrink-0">3.</span>
-                  Go to <span className="font-medium text-foreground">API Permissions &gt; Add &gt; Microsoft Graph &gt; Application</span> and add the required permissions listed
-                </li>
-                <li className="flex gap-2">
-                  <span className="font-semibold text-foreground shrink-0">4.</span>
-                  Click <span className="font-medium text-foreground">Grant admin consent</span> for your organization
-                </li>
-                <li className="flex gap-2">
-                  <span className="font-semibold text-foreground shrink-0">5.</span>
-                  Go to <span className="font-medium text-foreground">Certificates & Secrets &gt; New client secret</span> and copy the value
-                </li>
-                <li className="flex gap-2">
-                  <span className="font-semibold text-foreground shrink-0">6.</span>
-                  Note your <span className="font-medium text-foreground">Application (client) ID</span> and <span className="font-medium text-foreground">Directory (tenant) ID</span> from the Overview page
-                </li>
-              </ol>
-            </div>
+          <div className="max-w-2xl mx-auto space-y-8">
+            <Card>
+              <CardContent className="p-6 space-y-4">
+                <h4 className="text-base font-semibold flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-primary" />
+                  Azure App Registration
+                </h4>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  This tool requires an Azure AD (Entra ID) App Registration with
+                  application-level permissions. It uses the OAuth2 client credentials
+                  flow — no user sign-in is needed.
+                </p>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Required API Permissions:</p>
+                  <ul className="space-y-1.5 text-sm text-muted-foreground">
+                    <PermissionItem name="DeviceManagementConfiguration.ReadWrite.All" description="Read & create policies" />
+                    <PermissionItem name="Group.Read.All" description="Resolve group names" />
+                    <PermissionItem name="DeviceManagementRBAC.ReadWrite.All" description="Manage scope tags" />
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-6 space-y-4">
+                <h4 className="text-base font-semibold flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary" />
+                  Step-by-Step Setup
+                </h4>
+                <ol className="space-y-2.5 text-sm text-muted-foreground">
+                  <SetupStep n={1}>Go to Azure Portal, then App Registrations, and click New Registration</SetupStep>
+                  <SetupStep n={2}>Name it (e.g., "IntuneStuff Policy Converter") and register</SetupStep>
+                  <SetupStep n={3}>Under API Permissions, add the Microsoft Graph Application permissions listed above</SetupStep>
+                  <SetupStep n={4}>Click Grant admin consent for your organization</SetupStep>
+                  <SetupStep n={5}>Under Certificates & Secrets, create a new client secret and copy the value</SetupStep>
+                  <SetupStep n={6}>Note your Application (client) ID and Directory (tenant) ID from the Overview page</SetupStep>
+                </ol>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </section>
@@ -375,6 +361,17 @@ function PermissionItem({ name, description }: { name: string; description: stri
         <code className="text-xs font-mono bg-muted px-1 py-0.5 rounded">{name}</code>
         <span className="text-xs text-muted-foreground ml-1.5">— {description}</span>
       </span>
+    </li>
+  );
+}
+
+function SetupStep({ n, children }: { n: number; children: ReactNode }) {
+  return (
+    <li className="flex gap-3 items-start">
+      <span className="flex items-center justify-center h-6 w-6 rounded-md bg-primary/10 dark:bg-primary/20 text-primary text-xs font-bold shrink-0 mt-0.5">
+        {n}
+      </span>
+      <span>{children}</span>
     </li>
   );
 }
