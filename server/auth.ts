@@ -25,6 +25,13 @@ const SCOPES = [
   "email",
 ].join(" ");
 
+function getAuthority(): string {
+  const tenantId = process.env.AZURE_TENANT_ID;
+  return tenantId
+    ? `https://login.microsoftonline.com/${tenantId}`
+    : "https://login.microsoftonline.com/common";
+}
+
 function getRedirectUri(): string {
   const base = process.env.REPLIT_DEV_DOMAIN
     ? `https://${process.env.REPLIT_DEV_DOMAIN}`
@@ -73,7 +80,7 @@ export function registerAuthRoutes(app: Express): void {
         log(`Failed to save session state: ${err.message}`, "auth");
       }
 
-      const authUrl = new URL("https://login.microsoftonline.com/common/oauth2/v2.0/authorize");
+      const authUrl = new URL(`${getAuthority()}/oauth2/v2.0/authorize`);
       authUrl.searchParams.set("client_id", clientId);
       authUrl.searchParams.set("response_type", "code");
       authUrl.searchParams.set("redirect_uri", redirectUri);
@@ -114,7 +121,7 @@ export function registerAuthRoutes(app: Express): void {
 
     try {
       const redirectUri = getRedirectUri();
-      const tokenUrl = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
+      const tokenUrl = `${getAuthority()}/oauth2/v2.0/token`;
 
       const body = new URLSearchParams({
         client_id: clientId,
@@ -223,7 +230,7 @@ export async function refreshTokenIfNeeded(req: Request): Promise<string> {
           });
 
           const response = await fetch(
-            "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+            `${getAuthority()}/oauth2/v2.0/token`,
             {
               method: "POST",
               headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -249,7 +256,7 @@ export async function refreshTokenIfNeeded(req: Request): Promise<string> {
     }
   }
 
-  return req.session.accessToken;
+  return req.session.accessToken!;
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
