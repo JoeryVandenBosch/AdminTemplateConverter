@@ -1,18 +1,103 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+export interface AdminTemplatePolicy {
+  id: string;
+  displayName: string;
+  description: string | null;
+  createdDateTime: string;
+  lastModifiedDateTime: string;
+  roleScopeTagIds: string[];
+  settingsCount?: number;
+}
+
+export interface DefinitionValue {
+  id: string;
+  enabled: boolean;
+  configurationType: string;
+  definition?: GroupPolicyDefinition;
+  presentationValues?: PresentationValue[];
+}
+
+export interface GroupPolicyDefinition {
+  id: string;
+  displayName: string;
+  explainText: string | null;
+  categoryPath: string;
+  classType: "user" | "machine";
+  policyType: string;
+  supportedOn: string | null;
+  groupPolicyCategoryId: string | null;
+}
+
+export interface PresentationValue {
+  id: string;
+  "@odata.type": string;
+  value?: string | number | boolean;
+  values?: string[];
+  label?: string;
+  presentation?: {
+    id: string;
+    label: string;
+    "@odata.type": string;
+  };
+}
+
+export interface SettingsCatalogDefinition {
+  id: string;
+  displayName: string;
+  description: string | null;
+  categoryPath?: string;
+  settingDefinitionId: string;
+  baseUri?: string;
+  offsetUri?: string;
+  applicability?: {
+    platform?: string;
+    technologies?: string;
+  };
+}
+
+export interface ConversionResult {
+  policyName: string;
+  status: "success" | "partial" | "failed";
+  newPolicyId?: string;
+  totalSettings: number;
+  convertedSettings: number;
+  failedSettings: number;
+  details: ConversionDetail[];
+  error?: string;
+}
+
+export interface ConversionDetail {
+  settingName: string;
+  categoryPath: string;
+  status: "converted" | "not_found" | "error";
+  originalValue?: string;
+  mappedDefinitionId?: string;
+  error?: string;
+}
+
+export interface PolicyAssignment {
+  id: string;
+  target: {
+    "@odata.type": string;
+    groupId?: string;
+    deviceAndAppManagementAssignmentFilterId?: string;
+    deviceAndAppManagementAssignmentFilterType?: string;
+  };
+}
+
+export interface TenantInfo {
+  connected: boolean;
+  tenantId?: string;
+  displayName?: string;
+  error?: string;
+}
+
+export const convertPolicySchema = z.object({
+  policyId: z.string(),
+  newName: z.string().min(1, "Policy name is required"),
+  newDescription: z.string().optional(),
+  includeAssignments: z.boolean().default(false),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
-
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export type ConvertPolicyInput = z.infer<typeof convertPolicySchema>;
