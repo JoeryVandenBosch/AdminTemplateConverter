@@ -73,6 +73,7 @@ export interface ConversionDetail {
   status: "converted" | "not_found" | "error";
   originalValue?: string;
   mappedDefinitionId?: string;
+  mappedTo?: string;
   error?: string;
 }
 

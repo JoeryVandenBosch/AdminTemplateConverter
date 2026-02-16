@@ -316,6 +316,7 @@ export async function registerRoutes(
               mappedDefinitionId:
                 matchResult.definition.id ||
                 matchResult.definition.settingDefinitionId,
+              mappedTo: matchResult.definition.displayName || matchResult.definition.id,
               originalValue: setting.enabled ? "Enabled" : "Disabled",
             });
           } else {

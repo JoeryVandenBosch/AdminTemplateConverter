@@ -1269,8 +1269,8 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
         </>
       ) : (
         <>
-          <ScrollArea className="flex-1 min-h-0 max-h-[60vh]">
-            <div className="space-y-4 py-2 pr-3">
+          <div className="flex-1 min-h-0 max-h-[65vh] overflow-y-auto pr-1">
+            <div className="space-y-4 py-2 pr-2">
               <div className="flex items-center gap-3">
                 {result.status === "success" ? (
                   <div className="flex items-center justify-center h-10 w-10 rounded-md bg-emerald-500/10 dark:bg-emerald-500/20">
@@ -1334,18 +1334,18 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
               </div>
 
               {result.details && result.details.length > 0 && (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-8">Status</TableHead>
-                      <TableHead>Setting</TableHead>
-                      <TableHead className="hidden sm:table-cell">Category</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <div className="space-y-3">
+                  <p className="text-sm font-medium flex items-center gap-1">
+                    <Settings2 className="h-4 w-4" /> Settings Summary
+                  </p>
+                  <div className="space-y-1.5">
                     {result.details.map((detail, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell>
+                      <div
+                        key={idx}
+                        className="flex items-start gap-2 p-2 rounded-md bg-muted/50"
+                        data-testid={`result-detail-${idx}`}
+                      >
+                        <div className="shrink-0 mt-0.5">
                           {detail.status === "converted" ? (
                             <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                           ) : detail.status === "not_found" ? (
@@ -1353,17 +1353,38 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                           ) : (
                             <XCircle className="h-4 w-4 text-destructive" />
                           )}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {detail.settingName}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground hidden sm:table-cell">
-                          {detail.categoryPath}
-                        </TableCell>
-                      </TableRow>
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium leading-tight">{detail.settingName}</p>
+                            <Badge
+                              variant={detail.status === "converted" ? "secondary" : detail.status === "not_found" ? "outline" : "destructive"}
+                              className={`text-[9px] shrink-0 ${detail.status === "converted" ? "text-emerald-700 dark:text-emerald-300" : ""}`}
+                            >
+                              {detail.status === "converted" ? "Transferred" : detail.status === "not_found" ? "Not Mapped" : "Error"}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{detail.categoryPath}</p>
+                          {detail.originalValue && (
+                            <div className="flex items-center gap-1 text-xs">
+                              <span className="text-muted-foreground">Original:</span>
+                              <Badge variant="outline" className="text-[9px]">{detail.originalValue}</Badge>
+                            </div>
+                          )}
+                          {detail.status === "converted" && detail.mappedTo && (
+                            <div className="flex items-center gap-1 text-xs">
+                              <span className="text-muted-foreground">Mapped to:</span>
+                              <span className="text-emerald-700 dark:text-emerald-300 truncate">{detail.mappedTo}</span>
+                            </div>
+                          )}
+                          {detail.status !== "converted" && detail.error && (
+                            <p className="text-xs text-destructive">{detail.error}</p>
+                          )}
+                        </div>
+                      </div>
                     ))}
-                  </TableBody>
-                </Table>
+                  </div>
+                </div>
               )}
 
               {result.error && (
@@ -1422,7 +1443,7 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                 </>
               )}
             </div>
-          </ScrollArea>
+          </div>
 
           <DialogFooter>
             <Button onClick={onClose} data-testid="button-close-result">
