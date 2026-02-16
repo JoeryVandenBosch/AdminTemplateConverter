@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -237,7 +236,7 @@ function PolicyDetail({ policy, onClose, onConvert }: PolicyDetailProps) {
 
       <Separator />
 
-      <ScrollArea className="flex-1 min-h-0 max-h-[350px]">
+      <div className="flex-1 min-h-0 max-h-[350px] overflow-y-auto pr-1">
         {isLoading ? (
           <div className="space-y-3 p-1">
             {[1, 2, 3].map((i) => (
@@ -311,7 +310,7 @@ function PolicyDetail({ policy, onClose, onConvert }: PolicyDetailProps) {
             </p>
           </div>
         )}
-      </ScrollArea>
+      </div>
 
       <Separator />
 
@@ -468,7 +467,7 @@ function GroupSearch({ onSelectGroup, existingGroupIds }: { onSelectGroup: (grou
         </div>
       )}
       {filteredGroups && filteredGroups.length > 0 && (
-        <ScrollArea className="max-h-[150px]">
+        <div className="max-h-[150px] overflow-y-auto">
           <div className="space-y-1">
             {filteredGroups.map((group) => (
               <div
@@ -492,7 +491,7 @@ function GroupSearch({ onSelectGroup, existingGroupIds }: { onSelectGroup: (grou
               </div>
             ))}
           </div>
-        </ScrollArea>
+        </div>
       )}
       {filteredGroups && filteredGroups.length === 0 && debouncedQuery.length >= 2 && !searchLoading && (
         <p className="text-xs text-muted-foreground italic p-2">No groups found</p>
