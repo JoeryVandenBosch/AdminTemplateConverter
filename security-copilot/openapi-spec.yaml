@@ -8,6 +8,9 @@ info:
 servers:
   - url: https://admintemplate.intunestuff.com/api
 
+security:
+  - BearerAuth: []
+
 paths:
   /policies:
     get:
@@ -397,6 +400,11 @@ paths:
           description: Server error
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
     AdminTemplatePolicy:
       type: object
