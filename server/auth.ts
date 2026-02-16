@@ -26,25 +26,16 @@ const SCOPES = [
 ].join(" ");
 
 function getAuthority(): string {
-  const tenantId = process.env.AZURE_TENANT_ID;
-  return tenantId
-    ? `https://login.microsoftonline.com/${tenantId}`
-    : "https://login.microsoftonline.com/common";
+  return "https://login.microsoftonline.com/common";
 }
 
-function getRedirectUri(req?: Request): string {
-  if (req?.headers.host) {
-    const protocol = req.headers["x-forwarded-proto"] || (req.secure ? "https" : "http");
-    return `${protocol}://${req.headers.host}/api/auth/callback`;
-  }
+function getRedirectUri(): string {
   if (process.env.APP_DOMAIN) {
     return `https://${process.env.APP_DOMAIN}/api/auth/callback`;
   }
   const base = process.env.REPLIT_DEV_DOMAIN
     ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-    : process.env.REPL_SLUG
-      ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
-      : `http://localhost:${process.env.PORT || 5000}`;
+    : `http://localhost:${process.env.PORT || 5000}`;
   return `${base}/api/auth/callback`;
 }
 
@@ -81,7 +72,7 @@ export function registerAuthRoutes(app: Express): void {
       return res.status(500).json({ message: "Azure Client ID not configured" });
     }
 
-    const redirectUri = getRedirectUri(req);
+    const redirectUri = getRedirectUri();
     const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
     req.session.oauthState = state;
@@ -130,7 +121,7 @@ export function registerAuthRoutes(app: Express): void {
     }
 
     try {
-      const redirectUri = getRedirectUri(req);
+      const redirectUri = getRedirectUri();
       const tokenUrl = `${getAuthority()}/oauth2/v2.0/token`;
 
       const body = new URLSearchParams({
