@@ -18,6 +18,7 @@ import {
   ServerOff,
   ExternalLink,
   LogIn,
+  AlertTriangle,
 } from "lucide-react";
 import logoImg from "@assets/Color_logo_with_background_1771246173380.png";
 
@@ -257,6 +258,32 @@ export default function Landing() {
         </div>
       </section>
 
+      <section className="py-12 sm:py-16 bg-background">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="max-w-2xl mx-auto">
+            <Card className="bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+              <CardContent className="p-5">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold text-amber-800 dark:text-amber-200" data-testid="text-disclaimer-title">Important - Please Read</h4>
+                    <ul className="list-disc pl-4 space-y-1 text-xs text-amber-800 dark:text-amber-200">
+                      <li>A new Settings Catalog policy will be created with matched settings</li>
+                      <li>The original Administrative Template policy will not be deleted automatically</li>
+                      <li>Some settings may not have a direct mapping and will be skipped</li>
+                      <li>Always review the new policy in the Intune portal before assigning it to groups</li>
+                    </ul>
+                    <p className="text-xs text-amber-700 dark:text-amber-300 pt-1" data-testid="text-disclaimer-risk">
+                      This is a free community tool provided as-is with no warranty. Use at your own risk. Always verify converted policies in your Intune portal before applying them to production environments. The authors are not responsible for any unintended changes to your tenant configuration.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
       <section className="bg-sidebar text-sidebar-foreground py-16">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 text-center">
           <h3 className="text-2xl font-semibold mb-3 text-sidebar-foreground">
@@ -287,8 +314,10 @@ export default function Landing() {
             >
               <img src={logoImg} alt="IntuneStuff" className="h-8 w-auto rounded" />
             </a>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground text-center">
               Microsoft Cloud & Enterprise Mobility Tools
+              <br />
+              <span className="text-muted-foreground/60">Community tool provided as-is. Use at your own risk.</span>
             </p>
             <a
               href="https://intunestuff.com"

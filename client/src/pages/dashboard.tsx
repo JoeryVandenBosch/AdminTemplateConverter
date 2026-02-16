@@ -353,6 +353,23 @@ function PolicyDetail({ policy, onClose, onConvert }: PolicyDetailProps) {
             Delete Policy
           </Button>
         </div>
+        <Card className="bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+          <CardContent className="p-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <div className="text-xs text-amber-800 dark:text-amber-200">
+                <p className="font-medium mb-1">Before converting:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>A new Settings Catalog policy will be created with matched settings</li>
+                  <li>The original policy will not be deleted</li>
+                  <li>Some settings may not have a direct mapping and will be skipped</li>
+                  <li>Always review the new policy before assigning it to groups</li>
+                </ul>
+                <p className="mt-1.5 text-amber-700 dark:text-amber-300">This is a community tool provided as-is. Use at your own risk.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         <Button variant="outline" onClick={onClose} data-testid="button-close-detail">
           Close
         </Button>
@@ -1494,22 +1511,12 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                     <div className="text-xs text-amber-800 dark:text-amber-200">
                       <p className="font-medium mb-1">Before converting:</p>
                       <ul className="list-disc pl-4 space-y-0.5">
-                        <li>
-                          A new Settings Catalog policy will be created with
-                          matched settings
-                        </li>
-                        <li>
-                          The original Administrative Template policy will not be
-                          deleted
-                        </li>
-                        <li>
-                          Some settings may not have a direct mapping and will be
-                          skipped
-                        </li>
-                        <li>
-                          Review the new policy before assigning it to groups
-                        </li>
+                        <li>A new Settings Catalog policy will be created with matched settings</li>
+                        <li>The original Administrative Template policy will not be deleted</li>
+                        <li>Some settings may not have a direct mapping and will be skipped</li>
+                        <li>Always review the new policy before assigning it to groups</li>
                       </ul>
+                      <p className="mt-1.5 text-amber-700 dark:text-amber-300">This is a community tool provided as-is. Use at your own risk.</p>
                     </div>
                   </div>
                 </CardContent>
