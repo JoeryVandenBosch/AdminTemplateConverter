@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { log } from "./index";
+import { trackEvent } from "./analytics";
 
 declare module "express-session" {
   interface SessionData {
@@ -178,6 +179,11 @@ export function registerAuthRoutes(app: Express): void {
       }
 
       log(`User authenticated: ${req.session.userEmail || "unknown"}`, "auth");
+      trackEvent("sign_in", {
+        tenantId: req.session.tenantId,
+        userEmail: req.session.userEmail,
+        userDisplayName: req.session.userDisplayName,
+      });
       res.redirect("/converter");
     } catch (err: any) {
       log(`Auth callback error: ${err.message}`, "auth");

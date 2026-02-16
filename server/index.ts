@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupSession, registerAuthRoutes } from "./auth";
+import { initAnalyticsTables } from "./analytics";
 
 if (!process.env.SESSION_SECRET) {
   console.error("FATAL: SESSION_SECRET environment variable is required");
@@ -70,6 +71,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await initAnalyticsTables();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

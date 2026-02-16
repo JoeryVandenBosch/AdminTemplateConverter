@@ -23,6 +23,7 @@ import {
 import { convertPolicySchema } from "@shared/schema";
 import { log } from "./index";
 import { requireAuth, refreshTokenIfNeeded } from "./auth";
+import { trackEvent, getAnalyticsSummary } from "./analytics";
 
 async function getAccessToken(req: Request): Promise<string> {
   return refreshTokenIfNeeded(req);
@@ -420,6 +421,20 @@ export async function registerRoutes(
 
         const status = failedCount === 0 ? "success" : "partial";
 
+        trackEvent("conversion", {
+          tenantId: req.session.tenantId,
+          userEmail: req.session.userEmail,
+          userDisplayName: req.session.userDisplayName,
+          policyName: newName,
+          metadata: {
+            status,
+            totalSettings: settings.length,
+            convertedSettings: convertedCount,
+            failedSettings: failedCount,
+            newPolicyId: newPolicy.id,
+          },
+        });
+
         return res.json({
           policyName: newName,
           status,
@@ -516,6 +531,21 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error: any) {
       log(`Failed to update scope tags: ${error.message}`, "routes");
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/admin/analytics", async (req, res) => {
+    const adminKey = req.query.key || req.headers["x-admin-key"];
+    const expectedKey = process.env.ADMIN_KEY;
+    if (!expectedKey || adminKey !== expectedKey) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+    try {
+      const summary = await getAnalyticsSummary();
+      res.json(summary);
+    } catch (error: any) {
+      log(`Failed to get analytics: ${error.message}`, "routes");
       res.status(500).json({ message: error.message });
     }
   });
