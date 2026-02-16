@@ -159,5 +159,4 @@ AgentDefinitions:
     AgentSingleInstanceConstraint: None
     Triggers:
       - Name: OnDemand
-        DefaultPeriodSeconds: 0
         ProcessSkill: IntuneStuff.PolicyConverter.Agent.IntuneAdminTemplateConverter
