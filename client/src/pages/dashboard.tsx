@@ -1808,7 +1808,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-50 border-b border-sidebar-border bg-sidebar text-sidebar-foreground">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3">
@@ -1816,15 +1816,18 @@ export default function Dashboard() {
                 <ArrowRightLeft className="h-4 w-4" />
               </div>
               <div>
-                <h1 className="text-base font-semibold leading-tight">
+                <h1 className="text-base font-semibold leading-tight text-sidebar-foreground">
                   Intune Policy Converter
                 </h1>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-sidebar-foreground/60">
                   Administrative Templates to Settings Catalog
                 </p>
               </div>
             </div>
-            <ThemeToggle />
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-medium text-primary tracking-wider uppercase">IntuneStuff</span>
+              <ThemeToggle />
+            </div>
           </div>
         </div>
       </header>
