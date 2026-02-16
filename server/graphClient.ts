@@ -2,63 +2,14 @@ import { log } from "./index";
 
 const GRAPH_BASE_URL = "https://graph.microsoft.com/beta";
 
-let cachedToken: { token: string; expiresAt: number } | null = null;
-
-export async function getAccessToken(): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt > Date.now() + 60000) {
-    return cachedToken.token;
-  }
-
-  const tenantId = process.env.AZURE_TENANT_ID;
-  const clientId = process.env.AZURE_CLIENT_ID;
-  const clientSecret = process.env.AZURE_CLIENT_SECRET;
-
-  if (!tenantId || !clientId || !clientSecret) {
-    throw new Error(
-      "Missing Azure credentials. Please set AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET."
-    );
-  }
-
-  const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
-
-  const body = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    scope: "https://graph.microsoft.com/.default",
-    grant_type: "client_credentials",
-  });
-
-  const response = await fetch(tokenUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString(),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    log(`Token acquisition failed: ${errorText}`, "graph");
-    throw new Error(`Failed to acquire access token: ${response.status}`);
-  }
-
-  const data = await response.json();
-  cachedToken = {
-    token: data.access_token,
-    expiresAt: Date.now() + data.expires_in * 1000,
-  };
-
-  log("Access token acquired successfully", "graph");
-  return cachedToken.token;
-}
-
 async function graphRequest(
+  accessToken: string,
   url: string,
   method: string = "GET",
   body?: any
 ): Promise<any> {
-  const token = await getAccessToken();
-
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
+    Authorization: `Bearer ${accessToken}`,
     "Content-Type": "application/json",
   };
 
@@ -84,12 +35,12 @@ async function graphRequest(
   return response.json();
 }
 
-async function graphRequestAllPages(url: string): Promise<any[]> {
+async function graphRequestAllPages(accessToken: string, url: string): Promise<any[]> {
   const results: any[] = [];
   let nextUrl: string | null = url;
 
   while (nextUrl) {
-    const data = await graphRequest(nextUrl);
+    const data = await graphRequest(accessToken, nextUrl);
     if (data.value) {
       results.push(...data.value);
     }
@@ -99,33 +50,23 @@ async function graphRequestAllPages(url: string): Promise<any[]> {
   return results;
 }
 
-export async function getTenantInfo(): Promise<{
+export async function getTenantInfo(accessToken: string): Promise<{
   connected: boolean;
   tenantId?: string;
   displayName?: string;
   error?: string;
 }> {
   try {
-    await getAccessToken();
-    const tenantId = process.env.AZURE_TENANT_ID;
-
-    try {
-      const data = await graphRequest(
-        "https://graph.microsoft.com/v1.0/organization"
-      );
-      const org = data.value?.[0];
-      return {
-        connected: true,
-        tenantId: org?.id || tenantId,
-        displayName: org?.displayName,
-      };
-    } catch {
-      return {
-        connected: true,
-        tenantId: tenantId,
-        displayName: tenantId,
-      };
-    }
+    const data = await graphRequest(
+      accessToken,
+      "https://graph.microsoft.com/v1.0/organization"
+    );
+    const org = data.value?.[0];
+    return {
+      connected: true,
+      tenantId: org?.id,
+      displayName: org?.displayName,
+    };
   } catch (error: any) {
     return {
       connected: false,
@@ -134,8 +75,9 @@ export async function getTenantInfo(): Promise<{
   }
 }
 
-export async function getAdminTemplatePolicies(): Promise<any[]> {
+export async function getAdminTemplatePolicies(accessToken: string): Promise<any[]> {
   const policies = await graphRequestAllPages(
+    accessToken,
     `${GRAPH_BASE_URL}/deviceManagement/groupPolicyConfigurations`
   );
 
@@ -143,6 +85,7 @@ export async function getAdminTemplatePolicies(): Promise<any[]> {
     policies.map(async (policy: any) => {
       try {
         const defValues = await graphRequestAllPages(
+          accessToken,
           `${GRAPH_BASE_URL}/deviceManagement/groupPolicyConfigurations/${policy.id}/definitionValues`
         );
         return {
@@ -161,8 +104,9 @@ export async function getAdminTemplatePolicies(): Promise<any[]> {
   return policiesWithCounts;
 }
 
-export async function getPolicySettings(policyId: string): Promise<any[]> {
+export async function getPolicySettings(accessToken: string, policyId: string): Promise<any[]> {
   const definitionValues = await graphRequestAllPages(
+    accessToken,
     `${GRAPH_BASE_URL}/deviceManagement/groupPolicyConfigurations/${policyId}/definitionValues`
   );
 
@@ -171,9 +115,11 @@ export async function getPolicySettings(policyId: string): Promise<any[]> {
       try {
         const [definition, presentationValues] = await Promise.all([
           graphRequest(
+            accessToken,
             `${GRAPH_BASE_URL}/deviceManagement/groupPolicyConfigurations/${policyId}/definitionValues/${defValue.id}/definition`
           ),
           graphRequestAllPages(
+            accessToken,
             `${GRAPH_BASE_URL}/deviceManagement/groupPolicyConfigurations/${policyId}/definitionValues/${defValue.id}/presentationValues?$expand=presentation`
           ),
         ]);
@@ -181,6 +127,7 @@ export async function getPolicySettings(policyId: string): Promise<any[]> {
         let definitionFile = null;
         try {
           definitionFile = await graphRequest(
+            accessToken,
             `${GRAPH_BASE_URL}/deviceManagement/groupPolicyDefinitions/${definition.id}/definitionFile`
           );
         } catch {
@@ -213,10 +160,12 @@ export async function getPolicySettings(policyId: string): Promise<any[]> {
 }
 
 export async function getPolicyAssignments(
+  accessToken: string,
   policyId: string
 ): Promise<any[]> {
   try {
     return await graphRequestAllPages(
+      accessToken,
       `${GRAPH_BASE_URL}/deviceManagement/groupPolicyConfigurations/${policyId}/assignments`
     );
   } catch {
@@ -225,11 +174,13 @@ export async function getPolicyAssignments(
 }
 
 export async function searchSettingsCatalogDefinitions(
+  accessToken: string,
   searchTerm: string
 ): Promise<any[]> {
   try {
     const cleanTerm = searchTerm.replace(/'/g, "''");
     const data = await graphRequest(
+      accessToken,
       `${GRAPH_BASE_URL}/deviceManagement/configurationSettings?$filter=contains(displayName,'${encodeURIComponent(cleanTerm)}')&$top=50`
     );
     return data.value || [];
@@ -243,10 +194,12 @@ export async function searchSettingsCatalogDefinitions(
 }
 
 export async function getSettingDefinitionDetails(
+  accessToken: string,
   settingDefinitionId: string
 ): Promise<any | null> {
   try {
     const data = await graphRequest(
+      accessToken,
       `${GRAPH_BASE_URL}/deviceManagement/configurationSettings('${encodeURIComponent(settingDefinitionId)}')`
     );
     return data;
@@ -260,6 +213,7 @@ export async function getSettingDefinitionDetails(
 }
 
 export async function findMatchingSettingDefinition(
+  accessToken: string,
   displayName: string,
   categoryPath: string,
   classType: string,
@@ -268,7 +222,7 @@ export async function findMatchingSettingDefinition(
   try {
     const cleanName = displayName.replace(/['"]/g, "");
 
-    const results = await searchSettingsCatalogDefinitions(cleanName);
+    const results = await searchSettingsCatalogDefinitions(accessToken, cleanName);
 
     if (results.length > 0) {
       const exactMatch = results.find(
@@ -305,7 +259,7 @@ export async function findMatchingSettingDefinition(
     if (pathParts.length > 0) {
       const lastCategory = pathParts[pathParts.length - 1];
       const categoryResults =
-        await searchSettingsCatalogDefinitions(lastCategory);
+        await searchSettingsCatalogDefinitions(accessToken, lastCategory);
       const categoryMatch = categoryResults.find(
         (r: any) =>
           r.displayName?.toLowerCase().includes(cleanName.toLowerCase())
@@ -319,7 +273,7 @@ export async function findMatchingSettingDefinition(
       const admxName = definitionFile.fileName
         .replace(/\.admx$/i, "")
         .toLowerCase();
-      const admxResults = await searchSettingsCatalogDefinitions(admxName);
+      const admxResults = await searchSettingsCatalogDefinitions(accessToken, admxName);
       const admxMatch = admxResults.find(
         (r: any) =>
           r.displayName?.toLowerCase().includes(cleanName.toLowerCase())
@@ -340,6 +294,7 @@ export async function findMatchingSettingDefinition(
 }
 
 export async function createSettingsCatalogPolicy(
+  accessToken: string,
   name: string,
   description: string,
   settings: any[]
@@ -357,6 +312,7 @@ export async function createSettingsCatalogPolicy(
   };
 
   return graphRequest(
+    accessToken,
     `${GRAPH_BASE_URL}/deviceManagement/configurationPolicies`,
     "POST",
     policyBody
@@ -364,10 +320,12 @@ export async function createSettingsCatalogPolicy(
 }
 
 export async function assignSettingsCatalogPolicy(
+  accessToken: string,
   policyId: string,
   assignments: any[]
 ): Promise<void> {
   await graphRequest(
+    accessToken,
     `${GRAPH_BASE_URL}/deviceManagement/configurationPolicies/${policyId}/assign`,
     "POST",
     { assignments }
@@ -375,6 +333,7 @@ export async function assignSettingsCatalogPolicy(
 }
 
 export async function resolveGroupNames(
+  accessToken: string,
   groupIds: string[]
 ): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
@@ -384,6 +343,7 @@ export async function resolveGroupNames(
     uniqueIds.map(async (id) => {
       try {
         const group = await graphRequest(
+          accessToken,
           `https://graph.microsoft.com/v1.0/groups/${id}?$select=id,displayName`
         );
         result[id] = group.displayName || id;
@@ -396,15 +356,14 @@ export async function resolveGroupNames(
   return result;
 }
 
-export async function searchGroups(query: string): Promise<any[]> {
+export async function searchGroups(accessToken: string, query: string): Promise<any[]> {
   try {
     const cleanQuery = query.replace(/'/g, "''");
-    const token = await getAccessToken();
     const response = await fetch(
       `https://graph.microsoft.com/v1.0/groups?$search="displayName:${encodeURIComponent(cleanQuery)}"&$select=id,displayName,description,groupTypes,mailEnabled,securityEnabled&$top=20&$count=true`,
       {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
           ConsistencyLevel: "eventual",
         },
@@ -423,9 +382,10 @@ export async function searchGroups(query: string): Promise<any[]> {
   }
 }
 
-export async function getAssignmentFilters(): Promise<any[]> {
+export async function getAssignmentFilters(accessToken: string): Promise<any[]> {
   try {
     return await graphRequestAllPages(
+      accessToken,
       `${GRAPH_BASE_URL}/deviceManagement/assignmentFilters?$select=id,displayName,description,platform,rule,assignmentFilterManagementType`
     );
   } catch (err: any) {
@@ -435,6 +395,7 @@ export async function getAssignmentFilters(): Promise<any[]> {
 }
 
 export async function resolveFilterNames(
+  accessToken: string,
   filterIds: string[]
 ): Promise<Record<string, { displayName: string; platform: string; rule: string }>> {
   const result: Record<string, { displayName: string; platform: string; rule: string }> = {};
@@ -444,6 +405,7 @@ export async function resolveFilterNames(
     uniqueIds.map(async (id) => {
       try {
         const filter = await graphRequest(
+          accessToken,
           `${GRAPH_BASE_URL}/deviceManagement/assignmentFilters/${id}?$select=id,displayName,platform,rule`
         );
         result[id] = {
@@ -461,9 +423,11 @@ export async function resolveFilterNames(
 }
 
 export async function deleteAdminTemplatePolicyAssignments(
+  accessToken: string,
   policyId: string
 ): Promise<void> {
   await graphRequest(
+    accessToken,
     `${GRAPH_BASE_URL}/deviceManagement/groupPolicyConfigurations/${policyId}/assign`,
     "POST",
     { assignments: [] }
@@ -471,17 +435,20 @@ export async function deleteAdminTemplatePolicyAssignments(
 }
 
 export async function deleteAdminTemplatePolicy(
+  accessToken: string,
   policyId: string
 ): Promise<void> {
   await graphRequest(
+    accessToken,
     `${GRAPH_BASE_URL}/deviceManagement/groupPolicyConfigurations/${policyId}`,
     "DELETE"
   );
 }
 
-export async function getRoleScopeTags(): Promise<any[]> {
+export async function getRoleScopeTags(accessToken: string): Promise<any[]> {
   try {
     return await graphRequestAllPages(
+      accessToken,
       `${GRAPH_BASE_URL}/deviceManagement/roleScopeTags?$select=id,displayName,description,isBuiltIn`
     );
   } catch (err: any) {
@@ -491,10 +458,12 @@ export async function getRoleScopeTags(): Promise<any[]> {
 }
 
 export async function createRoleScopeTag(
+  accessToken: string,
   displayName: string,
   description: string
 ): Promise<any> {
   return graphRequest(
+    accessToken,
     `${GRAPH_BASE_URL}/deviceManagement/roleScopeTags`,
     "POST",
     {
@@ -506,18 +475,21 @@ export async function createRoleScopeTag(
   );
 }
 
-export async function deleteRoleScopeTag(tagId: string): Promise<void> {
+export async function deleteRoleScopeTag(accessToken: string, tagId: string): Promise<void> {
   await graphRequest(
+    accessToken,
     `${GRAPH_BASE_URL}/deviceManagement/roleScopeTags/${tagId}`,
     "DELETE"
   );
 }
 
 export async function updatePolicyScopeTags(
+  accessToken: string,
   policyId: string,
   roleScopeTagIds: string[]
 ): Promise<void> {
   await graphRequest(
+    accessToken,
     `${GRAPH_BASE_URL}/deviceManagement/groupPolicyConfigurations/${policyId}`,
     "PATCH",
     { roleScopeTagIds }
@@ -525,10 +497,12 @@ export async function updatePolicyScopeTags(
 }
 
 export async function updateSettingsCatalogPolicyScopeTags(
+  accessToken: string,
   policyId: string,
   roleScopeTagIds: string[]
 ): Promise<void> {
   await graphRequest(
+    accessToken,
     `${GRAPH_BASE_URL}/deviceManagement/configurationPolicies/${policyId}`,
     "PATCH",
     { roleScopeTagIds }

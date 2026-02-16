@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import {
   getTenantInfo,
@@ -22,23 +22,30 @@ import {
 } from "./graphClient";
 import { convertPolicySchema } from "@shared/schema";
 import { log } from "./index";
+import { requireAuth, refreshTokenIfNeeded } from "./auth";
+
+async function getAccessToken(req: Request): Promise<string> {
+  return refreshTokenIfNeeded(req);
+}
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  app.get("/api/tenant-info", async (_req, res) => {
+  app.get("/api/tenant-info", requireAuth, async (req, res) => {
     try {
-      const info = await getTenantInfo();
+      const accessToken = await getAccessToken(req);
+      const info = await getTenantInfo(accessToken);
       res.json(info);
     } catch (error: any) {
       res.json({ connected: false, error: error.message });
     }
   });
 
-  app.get("/api/policies", async (_req, res) => {
+  app.get("/api/policies", requireAuth, async (req, res) => {
     try {
-      const policies = await getAdminTemplatePolicies();
+      const accessToken = await getAccessToken(req);
+      const policies = await getAdminTemplatePolicies(accessToken);
       res.json(policies);
     } catch (error: any) {
       log(`Failed to fetch policies: ${error.message}`, "routes");
@@ -46,9 +53,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/policies/:id/settings", async (req, res) => {
+  app.get("/api/policies/:id/settings", requireAuth, async (req, res) => {
     try {
-      const settings = await getPolicySettings(req.params.id);
+      const accessToken = await getAccessToken(req);
+      const settings = await getPolicySettings(accessToken, req.params.id);
       res.json(settings);
     } catch (error: any) {
       log(`Failed to fetch settings: ${error.message}`, "routes");
@@ -56,9 +64,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/policies/:id/assignments", async (req, res) => {
+  app.get("/api/policies/:id/assignments", requireAuth, async (req, res) => {
     try {
-      const assignments = await getPolicyAssignments(req.params.id);
+      const accessToken = await getAccessToken(req);
+      const assignments = await getPolicyAssignments(accessToken, req.params.id);
       res.json(assignments);
     } catch (error: any) {
       log(`Failed to fetch assignments: ${error.message}`, "routes");
@@ -66,9 +75,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/policies/:id/assignments/resolve", async (req, res) => {
+  app.post("/api/policies/:id/assignments/resolve", requireAuth, async (req, res) => {
     try {
-      const assignments = await getPolicyAssignments(req.params.id);
+      const accessToken = await getAccessToken(req);
+      const assignments = await getPolicyAssignments(accessToken, req.params.id);
       const groupIds = assignments
         .map((a: any) => a.target?.groupId)
         .filter(Boolean);
@@ -77,8 +87,8 @@ export async function registerRoutes(
         .filter(Boolean);
 
       const [groupNames, filterNames] = await Promise.all([
-        groupIds.length > 0 ? resolveGroupNames(groupIds) : Promise.resolve({} as Record<string, string>),
-        filterIds.length > 0 ? resolveFilterNames(filterIds) : Promise.resolve({} as Record<string, { displayName: string; platform: string; rule: string }>),
+        groupIds.length > 0 ? resolveGroupNames(accessToken, groupIds) : Promise.resolve({} as Record<string, string>),
+        filterIds.length > 0 ? resolveFilterNames(accessToken, filterIds) : Promise.resolve({} as Record<string, { displayName: string; platform: string; rule: string }>),
       ]);
 
       const resolved = assignments.map((a: any) => {
@@ -122,9 +132,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/filters", async (_req, res) => {
+  app.get("/api/filters", requireAuth, async (req, res) => {
     try {
-      const filters = await getAssignmentFilters();
+      const accessToken = await getAccessToken(req);
+      const filters = await getAssignmentFilters(accessToken);
       res.json(filters);
     } catch (error: any) {
       log(`Failed to fetch assignment filters: ${error.message}`, "routes");
@@ -132,13 +143,14 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/groups/search", async (req, res) => {
+  app.get("/api/groups/search", requireAuth, async (req, res) => {
     try {
+      const accessToken = await getAccessToken(req);
       const query = (req.query.q as string) || "";
       if (query.length < 2) {
         return res.json([]);
       }
-      const groups = await searchGroups(query);
+      const groups = await searchGroups(accessToken, query);
       res.json(groups);
     } catch (error: any) {
       log(`Failed to search groups: ${error.message}`, "routes");
@@ -146,9 +158,10 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/policies/:id/assignments", async (req, res) => {
+  app.delete("/api/policies/:id/assignments", requireAuth, async (req, res) => {
     try {
-      await deleteAdminTemplatePolicyAssignments(req.params.id);
+      const accessToken = await getAccessToken(req);
+      await deleteAdminTemplatePolicyAssignments(accessToken, req.params.id);
       log(`Deleted assignments for policy ${req.params.id}`, "routes");
       res.json({ success: true });
     } catch (error: any) {
@@ -157,13 +170,14 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/settings-catalog/:id/assignments", async (req, res) => {
+  app.post("/api/settings-catalog/:id/assignments", requireAuth, async (req, res) => {
     try {
+      const accessToken = await getAccessToken(req);
       const assignments = req.body.assignments;
       if (!Array.isArray(assignments)) {
         return res.status(400).json({ message: "assignments must be an array" });
       }
-      await assignSettingsCatalogPolicy(req.params.id, assignments);
+      await assignSettingsCatalogPolicy(accessToken, req.params.id, assignments);
       log(`Added ${assignments.length} assignments to settings catalog policy ${req.params.id}`, "routes");
       res.json({ success: true });
     } catch (error: any) {
@@ -172,12 +186,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/policies/:id/preview-conversion", async (req, res) => {
+  app.post("/api/policies/:id/preview-conversion", requireAuth, async (req, res) => {
     try {
+      const accessToken = await getAccessToken(req);
       const policyId = req.params.id;
       log(`Starting conversion preview for policy ${policyId}`, "routes");
 
-      const settings = await getPolicySettings(policyId);
+      const settings = await getPolicySettings(accessToken, policyId);
 
       if (!settings || settings.length === 0) {
         return res.json({
@@ -205,6 +220,7 @@ export async function registerRoutes(
 
         try {
           const matchResult = await findMatchingSettingDefinition(
+            accessToken,
             definition.displayName,
             definition.categoryPath || "",
             definition.classType || "machine",
@@ -255,8 +271,9 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/policies/convert", async (req, res) => {
+  app.post("/api/policies/convert", requireAuth, async (req, res) => {
     try {
+      const accessToken = await getAccessToken(req);
       const parsed = convertPolicySchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({
@@ -270,7 +287,7 @@ export async function registerRoutes(
 
       log(`Starting conversion for policy ${policyId}`, "routes");
 
-      const settings = await getPolicySettings(policyId);
+      const settings = await getPolicySettings(accessToken, policyId);
 
       if (!settings || settings.length === 0) {
         return res.json({
@@ -301,6 +318,7 @@ export async function registerRoutes(
 
         try {
           const matchResult = await findMatchingSettingDefinition(
+            accessToken,
             definition.displayName,
             definition.categoryPath || "",
             definition.classType || "machine",
@@ -364,6 +382,7 @@ export async function registerRoutes(
 
       try {
         const newPolicy = await createSettingsCatalogPolicy(
+          accessToken,
           newName,
           newDescription || `Converted from Administrative Template`,
           catalogSettings
@@ -376,12 +395,13 @@ export async function registerRoutes(
 
         if (includeAssignments && newPolicy.id) {
           try {
-            const sourceAssignments = await getPolicyAssignments(policyId);
+            const sourceAssignments = await getPolicyAssignments(accessToken, policyId);
             if (sourceAssignments.length > 0) {
               const mappedAssignments = sourceAssignments.map((a: any) => ({
                 target: a.target,
               }));
               await assignSettingsCatalogPolicy(
+                accessToken,
                 newPolicy.id,
                 mappedAssignments
               );
@@ -430,9 +450,10 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/policies/:id", async (req, res) => {
+  app.delete("/api/policies/:id", requireAuth, async (req, res) => {
     try {
-      await deleteAdminTemplatePolicy(req.params.id);
+      const accessToken = await getAccessToken(req);
+      await deleteAdminTemplatePolicy(accessToken, req.params.id);
       log(`Deleted administrative template policy ${req.params.id}`, "routes");
       res.json({ success: true });
     } catch (error: any) {
@@ -441,9 +462,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/scope-tags", async (_req, res) => {
+  app.get("/api/scope-tags", requireAuth, async (req, res) => {
     try {
-      const tags = await getRoleScopeTags();
+      const accessToken = await getAccessToken(req);
+      const tags = await getRoleScopeTags(accessToken);
       res.json(tags);
     } catch (error: any) {
       log(`Failed to fetch scope tags: ${error.message}`, "routes");
@@ -451,13 +473,14 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/scope-tags", async (req, res) => {
+  app.post("/api/scope-tags", requireAuth, async (req, res) => {
     try {
+      const accessToken = await getAccessToken(req);
       const { displayName, description } = req.body;
       if (!displayName || typeof displayName !== "string") {
         return res.status(400).json({ message: "displayName is required" });
       }
-      const tag = await createRoleScopeTag(displayName, description || "");
+      const tag = await createRoleScopeTag(accessToken, displayName, description || "");
       log(`Created scope tag: ${displayName}`, "routes");
       res.json(tag);
     } catch (error: any) {
@@ -466,12 +489,13 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/scope-tags/:id", async (req, res) => {
+  app.delete("/api/scope-tags/:id", requireAuth, async (req, res) => {
     try {
+      const accessToken = await getAccessToken(req);
       if (req.params.id === "0") {
         return res.status(400).json({ message: "Cannot delete the built-in Default scope tag" });
       }
-      await deleteRoleScopeTag(req.params.id);
+      await deleteRoleScopeTag(accessToken, req.params.id);
       log(`Deleted scope tag ${req.params.id}`, "routes");
       res.json({ success: true });
     } catch (error: any) {
@@ -480,13 +504,14 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/settings-catalog/:id/scope-tags", async (req, res) => {
+  app.post("/api/settings-catalog/:id/scope-tags", requireAuth, async (req, res) => {
     try {
+      const accessToken = await getAccessToken(req);
       const { roleScopeTagIds } = req.body;
       if (!Array.isArray(roleScopeTagIds)) {
         return res.status(400).json({ message: "roleScopeTagIds must be an array" });
       }
-      await updateSettingsCatalogPolicyScopeTags(req.params.id, roleScopeTagIds);
+      await updateSettingsCatalogPolicyScopeTags(accessToken, req.params.id, roleScopeTagIds);
       log(`Updated scope tags for settings catalog policy ${req.params.id}`, "routes");
       res.json({ success: true });
     } catch (error: any) {

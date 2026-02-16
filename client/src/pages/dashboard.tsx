@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getQueryFn } from "@/lib/queryClient";
 import {
   RefreshCw,
   Search,
@@ -54,6 +54,7 @@ import {
   SlidersHorizontal,
   RotateCcw,
   Tag,
+  LogOut,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import logoImg from "@assets/Color_logo_with_background_1771246173380.png";
@@ -69,64 +70,6 @@ import type {
   RoleScopeTag,
 } from "@shared/schema";
 
-function ConnectionStatus() {
-  const { data: tenantInfo, isLoading } = useQuery<TenantInfo>({
-    queryKey: ["/api/tenant-info"],
-  });
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-10 w-10 rounded-md" />
-            <div className="flex-1">
-              <Skeleton className="h-4 w-32 mb-2" />
-              <Skeleton className="h-3 w-48" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const connected = tenantInfo?.connected;
-
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-3">
-          <div
-            className={`flex items-center justify-center h-10 w-10 rounded-md ${
-              connected
-                ? "bg-emerald-500/10 dark:bg-emerald-500/20"
-                : "bg-destructive/10 dark:bg-destructive/20"
-            }`}
-          >
-            {connected ? (
-              <Shield className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-            ) : (
-              <ShieldAlert className="h-5 w-5 text-destructive" />
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">
-              {connected ? "Connected to Tenant" : "Connection Failed"}
-            </p>
-            <p className="text-xs text-muted-foreground truncate">
-              {connected
-                ? tenantInfo?.displayName || tenantInfo?.tenantId
-                : tenantInfo?.error || "Unable to connect to Microsoft Graph"}
-            </p>
-          </div>
-          <Badge variant={connected ? "secondary" : "destructive"}>
-            {connected ? "Active" : "Error"}
-          </Badge>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 function PolicySkeleton() {
   return (
@@ -1768,11 +1711,27 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
 }
 
 export default function Dashboard() {
+  const [, setLocation] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPolicy, setSelectedPolicy] =
     useState<AdminTemplatePolicy | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [showConvert, setShowConvert] = useState(false);
+
+  const { data: authStatus, isLoading: authLoading } = useQuery<{ authenticated: boolean; user?: { displayName?: string; email?: string }; tenantId?: string }>({
+    queryKey: ["/api/auth/status"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/auth/logout");
+    },
+    onSuccess: () => {
+      queryClient.clear();
+      setLocation("/");
+    },
+  });
 
   const {
     data: policies,
@@ -1783,7 +1742,26 @@ export default function Dashboard() {
     isFetching,
   } = useQuery<AdminTemplatePolicy[]>({
     queryKey: ["/api/policies"],
+    enabled: !!authStatus?.authenticated,
   });
+
+  useEffect(() => {
+    if (!authLoading && !authStatus?.authenticated) {
+      setLocation("/");
+    }
+  }, [authLoading, authStatus, setLocation]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!authStatus?.authenticated) {
+    return null;
+  }
 
   const filteredPolicies = policies?.filter(
     (p) =>
@@ -1831,13 +1809,41 @@ export default function Dashboard() {
                 </p>
               </div>
             </div>
-            <ThemeToggle />
+            <div className="flex items-center gap-3">
+              {authStatus?.user && (
+                <div className="text-right hidden sm:block">
+                  {authStatus.user.displayName && (
+                    <p className="text-sm font-medium leading-tight text-sidebar-foreground" data-testid="text-user-name">
+                      {authStatus.user.displayName}
+                    </p>
+                  )}
+                  {authStatus.user.email && (
+                    <p className="text-xs text-sidebar-foreground/60" data-testid="text-user-email">
+                      {authStatus.user.email}
+                    </p>
+                  )}
+                </div>
+              )}
+              <ThemeToggle />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => logoutMutation.mutate()}
+                disabled={logoutMutation.isPending}
+                data-testid="button-logout"
+              >
+                {logoutMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <LogOut className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        <ConnectionStatus />
 
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">

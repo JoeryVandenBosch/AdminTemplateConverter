@@ -1,11 +1,13 @@
-import type { ComponentType, ReactNode } from "react";
-import { Link } from "wouter";
+import type { ComponentType } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { getQueryFn } from "@/lib/queryClient";
 import {
   ArrowRightLeft,
-  Shield,
   ShieldCheck,
   Zap,
   Eye,
@@ -14,12 +16,32 @@ import {
   Trash2,
   Lock,
   ServerOff,
-  FileText,
   ExternalLink,
+  LogIn,
 } from "lucide-react";
 import logoImg from "@assets/Color_logo_with_background_1771246173380.png";
 
 export default function Landing() {
+  const { data: authStatus } = useQuery<{
+    authenticated: boolean;
+    user?: { displayName?: string; email?: string };
+    tenantId?: string;
+  }>({
+    queryKey: ["/api/auth/status"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (authStatus?.authenticated) {
+      setLocation("/converter");
+    }
+  }, [authStatus, setLocation]);
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const authError = urlParams.get("auth_error");
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b border-sidebar-border bg-sidebar text-sidebar-foreground">
@@ -69,12 +91,22 @@ export default function Landing() {
                 Microsoft Intune Administrative Template policies to the newer
                 Settings Catalog format — directly in your tenant.
               </p>
+              {authError && (
+                <Card className="border-destructive bg-destructive/10">
+                  <CardContent className="p-3">
+                    <p className="text-sm text-destructive">
+                      Sign-in failed: {decodeURIComponent(authError)}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
               <div className="flex items-center gap-3 flex-wrap">
-                <Link href="/converter">
-                  <Button size="lg" data-testid="button-launch-converter">
-                    Launch Converter
+                <a href="/api/auth/login">
+                  <Button size="lg" data-testid="button-sign-in">
+                    <LogIn className="h-4 w-4 mr-2" />
+                    Sign in with Microsoft
                   </Button>
-                </Link>
+                </a>
                 <a href="#features">
                   <Button variant="outline" size="lg" className="border-sidebar-foreground/20 text-sidebar-foreground bg-transparent" data-testid="button-learn-more">
                     Learn More
@@ -82,9 +114,9 @@ export default function Landing() {
                 </a>
               </div>
               <div className="flex items-center gap-2 pt-2">
-                <Badge label="v1.0" />
+                <VersionBadge label="v1.0" />
                 <span className="text-xs text-sidebar-foreground/50">
-                  Web App | Azure AD App Registration Required
+                  Web App | Admin consent required
                 </span>
               </div>
             </div>
@@ -153,53 +185,51 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-12">
             <h3 className="text-2xl font-semibold mb-2">
-              Setup Requirements
+              How It Works
             </h3>
             <div className="w-12 h-0.5 bg-primary mx-auto mt-3" />
           </div>
-          <div className="max-w-2xl mx-auto space-y-8">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StepCard step={1} title="Sign In" description="Click 'Sign in with Microsoft' and grant admin consent for your organization. No app registration needed." />
+            <StepCard step={2} title="Select" description="Browse your Administrative Template policies and select one to convert." />
+            <StepCard step={3} title="Preview" description="Preview the conversion to see which settings will map successfully to Settings Catalog." />
+            <StepCard step={4} title="Convert" description="Create the new Settings Catalog policy with optional assignment and scope tag transfer." />
+          </div>
+        </div>
+      </section>
+
+      <section className="py-16 sm:py-20 bg-background">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12">
+            <h3 className="text-2xl font-semibold mb-2">
+              Admin Consent
+            </h3>
+            <div className="w-12 h-0.5 bg-primary mx-auto mt-3" />
+          </div>
+          <div className="max-w-2xl mx-auto">
             <Card>
               <CardContent className="p-6 space-y-4">
-                <h4 className="text-base font-semibold flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-primary" />
-                  Azure App Registration
-                </h4>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  This tool requires an Azure AD (Entra ID) App Registration with
-                  application-level permissions. It uses the OAuth2 client credentials
-                  flow — no user sign-in is needed.
+                  When you sign in for the first time, a Global Administrator will need to consent to the following delegated permissions on behalf of your organization. This is a one-time process.
                 </p>
                 <div className="space-y-2">
-                  <p className="text-sm font-medium">Required API Permissions:</p>
+                  <p className="text-sm font-medium">Required Permissions:</p>
                   <ul className="space-y-1.5 text-sm text-muted-foreground">
                     <PermissionItem name="DeviceManagementConfiguration.ReadWrite.All" description="Read & create policies" />
                     <PermissionItem name="Group.Read.All" description="Resolve group names" />
                     <PermissionItem name="DeviceManagementRBAC.ReadWrite.All" description="Manage scope tags" />
                   </ul>
                 </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-6 space-y-4">
-                <h4 className="text-base font-semibold flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-primary" />
-                  Step-by-Step Setup
-                </h4>
-                <ol className="space-y-2.5 text-sm text-muted-foreground">
-                  <SetupStep n={1}>Go to Azure Portal, then App Registrations, and click New Registration</SetupStep>
-                  <SetupStep n={2}>Name it (e.g., "IntuneStuff Policy Converter") and register</SetupStep>
-                  <SetupStep n={3}>Under API Permissions, add the Microsoft Graph Application permissions listed above</SetupStep>
-                  <SetupStep n={4}>Click Grant admin consent for your organization</SetupStep>
-                  <SetupStep n={5}>Under Certificates & Secrets, create a new client secret and copy the value</SetupStep>
-                  <SetupStep n={6}>Note your Application (client) ID and Directory (tenant) ID from the Overview page</SetupStep>
-                </ol>
+                <p className="text-xs text-muted-foreground">
+                  These permissions allow the tool to read your existing Administrative Template policies and create new Settings Catalog policies in your tenant. No app registration is required on your end.
+                </p>
               </CardContent>
             </Card>
           </div>
         </div>
       </section>
 
-      <section id="privacy" className="py-16 sm:py-20 bg-background">
+      <section id="privacy" className="py-16 sm:py-20 bg-card">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-12">
             <h3 className="text-2xl font-semibold mb-2">
@@ -215,8 +245,8 @@ export default function Landing() {
             />
             <PrivacyCard
               icon={Lock}
-              title="Your Credentials Stay Yours"
-              description="Your Azure credentials (Tenant ID, Client ID, Client Secret) are used only for authenticating API calls. They are never shared, logged, or transmitted to third parties."
+              title="Secure Authentication"
+              description="Authentication is handled entirely by Microsoft's identity platform. Your credentials never pass through our servers — only secure OAuth2 tokens."
             />
             <PrivacyCard
               icon={ShieldCheck}
@@ -227,37 +257,21 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="py-16 sm:py-20 bg-card">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-10">
-            <h3 className="text-2xl font-semibold mb-2">
-              How It Works
-            </h3>
-            <div className="w-12 h-0.5 bg-primary mx-auto mt-3" />
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StepCard step={1} title="Connect" description="Enter your Azure App Registration credentials to connect to your Microsoft 365 tenant." />
-            <StepCard step={2} title="Select" description="Browse your Administrative Template policies and select one to convert." />
-            <StepCard step={3} title="Preview" description="Preview the conversion to see which settings will map successfully to Settings Catalog." />
-            <StepCard step={4} title="Convert" description="Create the new Settings Catalog policy with optional assignment and scope tag transfer." />
-          </div>
-        </div>
-      </section>
-
       <section className="bg-sidebar text-sidebar-foreground py-16">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 text-center">
           <h3 className="text-2xl font-semibold mb-3 text-sidebar-foreground">
             Ready to Convert Your Policies?
           </h3>
           <p className="text-sidebar-foreground/60 mb-6 max-w-lg mx-auto">
-            Launch the converter to start migrating your deprecated Administrative
+            Sign in with your Microsoft account to start migrating your deprecated Administrative
             Template policies to the modern Settings Catalog format.
           </p>
-          <Link href="/converter">
-            <Button size="lg" data-testid="button-launch-converter-bottom">
-              Launch Converter
+          <a href="/api/auth/login">
+            <Button size="lg" data-testid="button-sign-in-bottom">
+              <LogIn className="h-4 w-4 mr-2" />
+              Sign in with Microsoft
             </Button>
-          </Link>
+          </a>
         </div>
       </section>
 
@@ -293,7 +307,7 @@ export default function Landing() {
   );
 }
 
-function Badge({ label }: { label: string }) {
+function VersionBadge({ label }: { label: string }) {
   return (
     <span className="inline-flex items-center rounded-md bg-primary px-2.5 py-0.5 text-xs font-medium text-primary-foreground">
       {label}
@@ -359,19 +373,8 @@ function PermissionItem({ name, description }: { name: string; description: stri
       <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
       <span>
         <code className="text-xs font-mono bg-muted px-1 py-0.5 rounded">{name}</code>
-        <span className="text-xs text-muted-foreground ml-1.5">— {description}</span>
+        <span className="text-xs text-muted-foreground ml-1.5">-- {description}</span>
       </span>
-    </li>
-  );
-}
-
-function SetupStep({ n, children }: { n: number; children: ReactNode }) {
-  return (
-    <li className="flex gap-3 items-start">
-      <span className="flex items-center justify-center h-6 w-6 rounded-md bg-primary/10 dark:bg-primary/20 text-primary text-xs font-bold shrink-0 mt-0.5">
-        {n}
-      </span>
-      <span>{children}</span>
     </li>
   );
 }

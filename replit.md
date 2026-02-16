@@ -29,7 +29,7 @@ Preferred communication style: Simple, everyday language.
 - **Path Aliases**: `@/` maps to `client/src/`, `@shared/` maps to `shared/`
 
 The frontend is a multi-page SPA with:
-- **Landing page** (`/`) — IntuneStuff branded intro with features, privacy info, and setup guide (`client/src/pages/landing.tsx`)
+- **Landing page** (`/`) — IntuneStuff branded intro with "Sign in with Microsoft" button, features, admin consent info, and privacy details (`client/src/pages/landing.tsx`)
 - **Converter dashboard** (`/converter`) — Main policy conversion tool (`client/src/pages/dashboard.tsx`)
 - **Branding**: IntuneStuff gold/amber (#C9A961) primary, dark teal header/sidebar (HSL 195 25% 18%), Segoe UI font stack
 - Dark/light mode toggling with localStorage persistence via custom `ThemeProvider`.
@@ -39,8 +39,9 @@ The frontend is a multi-page SPA with:
 - **Entry Point**: `server/index.ts`
 - **API Pattern**: RESTful API routes prefixed with `/api/`
 - **Key Modules**:
-  - `server/routes.ts` — API route definitions (policy CRUD, conversion operations)
-  - `server/graphClient.ts` — Microsoft Graph API client with OAuth2 client credentials flow and token caching
+  - `server/auth.ts` — OAuth2 authorization code flow with admin consent, session management, token refresh
+  - `server/routes.ts` — API route definitions (policy CRUD, conversion operations), all protected by requireAuth middleware
+  - `server/graphClient.ts` — Microsoft Graph API client accepting per-request access tokens
   - `server/storage.ts` — Storage interface (currently in-memory, prepared for database)
   - `server/vite.ts` — Vite dev server middleware for development
   - `server/static.ts` — Static file serving for production builds
@@ -61,7 +62,13 @@ The storage layer currently uses an in-memory implementation (`MemStorage`), but
   - Selectively bundles server dependencies from an allowlist to optimize cold start times
 - **Production Start**: `node dist/index.cjs`
 
-### API Endpoints
+### Authentication Endpoints
+- `GET /api/auth/login` — Redirects to Microsoft OAuth2 login with admin consent prompt
+- `GET /api/auth/callback` — OAuth2 callback, exchanges code for tokens, stores in session
+- `POST /api/auth/logout` — Destroys session and logs user out
+- `GET /api/auth/status` — Returns auth status, user info (displayName, email), tenantId
+
+### API Endpoints (all require authentication via requireAuth middleware)
 - `GET /api/tenant-info` — Fetch connected Azure tenant information
 - `GET /api/policies` — List all Administrative Template policies
 - `GET /api/policies/:id/settings` — Get settings for a specific policy
@@ -83,18 +90,20 @@ The storage layer currently uses an in-memory implementation (`MemStorage`), but
 
 ### Microsoft Graph API (Beta)
 - **Purpose**: Core integration for reading Intune Administrative Template policies and creating Settings Catalog policies
-- **Auth**: OAuth2 client credentials flow (app-only, no user interaction)
+- **Auth**: Multi-tenant OAuth2 authorization code flow with admin consent (delegated permissions, user signs in via Microsoft)
 - **Required Environment Variables**:
-  - `AZURE_TENANT_ID` — Azure AD tenant ID
-  - `AZURE_CLIENT_ID` — Azure AD application (client) ID
+  - `AZURE_CLIENT_ID` — Azure AD multi-tenant application (client) ID
   - `AZURE_CLIENT_SECRET` — Azure AD application client secret
-- **Token Caching**: Access tokens are cached in memory with 60-second pre-expiry refresh
+  - `SESSION_SECRET` — Secret for express-session cookie signing
+- **Auth Flow**: User clicks "Sign in with Microsoft" → Microsoft login with admin consent prompt → callback exchanges code for tokens → stored in session → user redirected to /converter
+- **Token Refresh**: Tokens auto-refresh when within 2 minutes of expiry using refresh_token grant
+- **Delegated Scopes**: DeviceManagementConfiguration.ReadWrite.All, Group.Read.All, DeviceManagementRBAC.ReadWrite.All, offline_access, openid, profile, email
 - **Base URL**: `https://graph.microsoft.com/beta`
 
 ### PostgreSQL Database
 - **Required Environment Variable**: `DATABASE_URL`
 - **Used for**: Persistent data storage via Drizzle ORM
-- **Session Store**: `connect-pg-simple` is available for session persistence
+- **Session Store**: `connect-pg-simple` with PostgreSQL table `user_sessions` for session persistence
 
 ### Key NPM Packages
 - `drizzle-orm` / `drizzle-kit` / `drizzle-zod` — Database ORM and schema validation
@@ -103,4 +112,4 @@ The storage layer currently uses an in-memory implementation (`MemStorage`), but
 - `wouter` — Client-side routing
 - `lucide-react` — Icon library
 - Radix UI primitives — Accessible UI component foundations
-- `express-session` / `connect-pg-simple` — Session management (available but not actively used)
+- `express-session` / `connect-pg-simple` — Session management with PostgreSQL-backed session store
