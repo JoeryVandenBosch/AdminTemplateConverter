@@ -470,6 +470,71 @@ export async function deleteAdminTemplatePolicyAssignments(
   );
 }
 
+export async function deleteAdminTemplatePolicy(
+  policyId: string
+): Promise<void> {
+  await graphRequest(
+    `${GRAPH_BASE_URL}/deviceManagement/groupPolicyConfigurations/${policyId}`,
+    "DELETE"
+  );
+}
+
+export async function getRoleScopeTags(): Promise<any[]> {
+  try {
+    return await graphRequestAllPages(
+      `${GRAPH_BASE_URL}/deviceManagement/roleScopeTags?$select=id,displayName,description,isBuiltIn`
+    );
+  } catch (err: any) {
+    log(`Failed to fetch role scope tags: ${err.message}`, "graph");
+    return [];
+  }
+}
+
+export async function createRoleScopeTag(
+  displayName: string,
+  description: string
+): Promise<any> {
+  return graphRequest(
+    `${GRAPH_BASE_URL}/deviceManagement/roleScopeTags`,
+    "POST",
+    {
+      "@odata.type": "#microsoft.graph.roleScopeTag",
+      displayName,
+      description,
+      isBuiltIn: false,
+    }
+  );
+}
+
+export async function deleteRoleScopeTag(tagId: string): Promise<void> {
+  await graphRequest(
+    `${GRAPH_BASE_URL}/deviceManagement/roleScopeTags/${tagId}`,
+    "DELETE"
+  );
+}
+
+export async function updatePolicyScopeTags(
+  policyId: string,
+  roleScopeTagIds: string[]
+): Promise<void> {
+  await graphRequest(
+    `${GRAPH_BASE_URL}/deviceManagement/groupPolicyConfigurations/${policyId}`,
+    "PATCH",
+    { roleScopeTagIds }
+  );
+}
+
+export async function updateSettingsCatalogPolicyScopeTags(
+  policyId: string,
+  roleScopeTagIds: string[]
+): Promise<void> {
+  await graphRequest(
+    `${GRAPH_BASE_URL}/deviceManagement/configurationPolicies/${policyId}`,
+    "PATCH",
+    { roleScopeTagIds }
+  );
+}
+
 export function buildSettingsCatalogSetting(
   matchedDefinition: any,
   enabled: boolean,

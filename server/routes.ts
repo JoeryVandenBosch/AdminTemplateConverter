@@ -9,11 +9,16 @@ import {
   createSettingsCatalogPolicy,
   assignSettingsCatalogPolicy,
   deleteAdminTemplatePolicyAssignments,
+  deleteAdminTemplatePolicy,
   resolveGroupNames,
   searchGroups,
   getAssignmentFilters,
   resolveFilterNames,
   buildSettingsCatalogSetting,
+  getRoleScopeTags,
+  createRoleScopeTag,
+  deleteRoleScopeTag,
+  updateSettingsCatalogPolicyScopeTags,
 } from "./graphClient";
 import { convertPolicySchema } from "@shared/schema";
 import { log } from "./index";
@@ -421,6 +426,71 @@ export async function registerRoutes(
       }
     } catch (error: any) {
       log(`Conversion error: ${error.message}`, "routes");
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/policies/:id", async (req, res) => {
+    try {
+      await deleteAdminTemplatePolicy(req.params.id);
+      log(`Deleted administrative template policy ${req.params.id}`, "routes");
+      res.json({ success: true });
+    } catch (error: any) {
+      log(`Failed to delete policy: ${error.message}`, "routes");
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/scope-tags", async (_req, res) => {
+    try {
+      const tags = await getRoleScopeTags();
+      res.json(tags);
+    } catch (error: any) {
+      log(`Failed to fetch scope tags: ${error.message}`, "routes");
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/scope-tags", async (req, res) => {
+    try {
+      const { displayName, description } = req.body;
+      if (!displayName || typeof displayName !== "string") {
+        return res.status(400).json({ message: "displayName is required" });
+      }
+      const tag = await createRoleScopeTag(displayName, description || "");
+      log(`Created scope tag: ${displayName}`, "routes");
+      res.json(tag);
+    } catch (error: any) {
+      log(`Failed to create scope tag: ${error.message}`, "routes");
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/scope-tags/:id", async (req, res) => {
+    try {
+      if (req.params.id === "0") {
+        return res.status(400).json({ message: "Cannot delete the built-in Default scope tag" });
+      }
+      await deleteRoleScopeTag(req.params.id);
+      log(`Deleted scope tag ${req.params.id}`, "routes");
+      res.json({ success: true });
+    } catch (error: any) {
+      log(`Failed to delete scope tag: ${error.message}`, "routes");
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/settings-catalog/:id/scope-tags", async (req, res) => {
+    try {
+      const { roleScopeTagIds } = req.body;
+      if (!Array.isArray(roleScopeTagIds)) {
+        return res.status(400).json({ message: "roleScopeTagIds must be an array" });
+      }
+      await updateSettingsCatalogPolicyScopeTags(req.params.id, roleScopeTagIds);
+      log(`Updated scope tags for settings catalog policy ${req.params.id}`, "routes");
+      res.json({ success: true });
+    } catch (error: any) {
+      log(`Failed to update scope tags: ${error.message}`, "routes");
       res.status(500).json({ message: error.message });
     }
   });

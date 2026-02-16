@@ -122,6 +122,13 @@ export interface TenantInfo {
   error?: string;
 }
 
+export interface RoleScopeTag {
+  id: string;
+  displayName: string;
+  description?: string;
+  isBuiltIn: boolean;
+}
+
 export const convertPolicySchema = z.object({
   policyId: z.string(),
   newName: z.string().min(1, "Policy name is required"),

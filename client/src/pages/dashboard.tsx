@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +53,7 @@ import {
   Filter,
   SlidersHorizontal,
   RotateCcw,
+  Tag,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type {
@@ -64,6 +65,7 @@ import type {
   ResolvedAssignment,
   AzureGroup,
   AssignmentFilter,
+  RoleScopeTag,
 } from "@shared/schema";
 
 function ConnectionStatus() {
@@ -160,6 +162,7 @@ function AssignmentTargetIcon({ targetType }: { targetType: string }) {
 }
 
 function PolicyDetail({ policy, onClose, onConvert }: PolicyDetailProps) {
+  const { toast } = useToast();
   const { data: settings, isLoading } = useQuery<DefinitionValue[]>({
     queryKey: ["/api/policies", policy.id, "settings"],
   });
@@ -169,6 +172,34 @@ function PolicyDetail({ policy, onClose, onConvert }: PolicyDetailProps) {
     queryFn: async () => {
       const res = await apiRequest("POST", `/api/policies/${policy.id}/assignments/resolve`);
       return res.json();
+    },
+  });
+
+  const deleteAssignmentsMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/policies/${policy.id}/assignments`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/policies", policy.id, "assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/policies", policy.id, "assignments", "resolve"] });
+      toast({ title: "Assignments deleted", description: "All assignments have been removed from this policy." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to delete assignments", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deletePolicyMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/policies/${policy.id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/policies"] });
+      toast({ title: "Policy deleted", description: `"${policy.displayName}" has been permanently deleted.` });
+      onClose();
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to delete policy", description: error.message, variant: "destructive" });
     },
   });
 
@@ -197,6 +228,10 @@ function PolicyDetail({ policy, onClose, onConvert }: PolicyDetailProps) {
         <span className="flex items-center gap-1">
           <Users className="h-3 w-3" />
           {resolvedAssignments?.length ?? "..."} assignment{(resolvedAssignments?.length ?? 0) !== 1 ? "s" : ""}
+        </span>
+        <span className="flex items-center gap-1">
+          <Tag className="h-3 w-3" />
+          {policy.roleScopeTagIds.length} scope tag{policy.roleScopeTagIds.length !== 1 ? "s" : ""}
         </span>
       </div>
 
@@ -335,7 +370,45 @@ function PolicyDetail({ policy, onClose, onConvert }: PolicyDetailProps) {
 
       <Separator />
 
-      <DialogFooter className="gap-2">
+      <DialogFooter className="gap-2 flex-wrap">
+        <div className="flex items-center gap-2 mr-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (confirm("Delete all assignments from this policy? This cannot be undone.")) {
+                deleteAssignmentsMutation.mutate();
+              }
+            }}
+            disabled={deleteAssignmentsMutation.isPending || !resolvedAssignments?.length}
+            data-testid="button-delete-assignments"
+          >
+            {deleteAssignmentsMutation.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+            )}
+            Delete Assignments
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => {
+              if (confirm(`Permanently delete "${policy.displayName}"? This cannot be undone.`)) {
+                deletePolicyMutation.mutate();
+              }
+            }}
+            disabled={deletePolicyMutation.isPending}
+            data-testid="button-delete-policy"
+          >
+            {deletePolicyMutation.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+            )}
+            Delete Policy
+          </Button>
+        </div>
         <Button variant="outline" onClick={onClose} data-testid="button-close-detail">
           Close
         </Button>
@@ -534,12 +607,70 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
   }>>([]);
   const [copiedFilterOverrides, setCopiedFilterOverrides] = useState<Record<string, { filterId: string; filterName: string; filterType: "include" | "exclude" }>>({});
   const [removedCopiedFilters, setRemovedCopiedFilters] = useState<Set<string>>(new Set());
+  const [selectedScopeTags, setSelectedScopeTags] = useState<Array<{ id: string; displayName: string }>>(
+    policy.roleScopeTagIds.map((id) => ({ id, displayName: id === "0" ? "Default" : id }))
+  );
+  const [showScopeTagPicker, setShowScopeTagPicker] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagDescription, setNewTagDescription] = useState("");
+  const [showCreateTag, setShowCreateTag] = useState(false);
 
   const { data: resolvedAssignments } = useQuery<ResolvedAssignment[]>({
     queryKey: ["/api/policies", policy.id, "assignments", "resolve"],
     queryFn: async () => {
       const res = await apiRequest("POST", `/api/policies/${policy.id}/assignments/resolve`);
       return res.json();
+    },
+  });
+
+  const { data: availableScopeTags } = useQuery<RoleScopeTag[]>({
+    queryKey: ["/api/scope-tags"],
+  });
+
+  useEffect(() => {
+    if (availableScopeTags && availableScopeTags.length > 0) {
+      setSelectedScopeTags((prev) =>
+        prev.map((tag) => {
+          const found = availableScopeTags.find((t) => t.id === tag.id);
+          return found ? { id: found.id, displayName: found.displayName } : tag;
+        })
+      );
+    }
+  }, [availableScopeTags]);
+
+  const createTagMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/scope-tags", {
+        displayName: newTagName,
+        description: newTagDescription,
+      });
+      return res.json();
+    },
+    onSuccess: (tag) => {
+      setSelectedScopeTags((prev) => [...prev, { id: tag.id, displayName: tag.displayName }]);
+      setNewTagName("");
+      setNewTagDescription("");
+      setShowCreateTag(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/scope-tags"] });
+      toast({ title: "Scope tag created", description: `"${tag.displayName}" has been created and added.` });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to create scope tag", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteTagMutation = useMutation({
+    mutationFn: async (tagId: string) => {
+      await apiRequest("DELETE", `/api/scope-tags/${tagId}`);
+      return tagId;
+    },
+    onSuccess: (tagId) => {
+      setSelectedScopeTags((prev) => prev.filter((t) => t.id !== tagId));
+      queryClient.invalidateQueries({ queryKey: ["/api/scope-tags"] });
+      toast({ title: "Scope tag deleted" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to delete scope tag", description: error.message, variant: "destructive" });
     },
   });
 
@@ -632,6 +763,23 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
             description: `Policy converted but failed to apply assignments: ${err.message}`,
             variant: "destructive",
           });
+        }
+      }
+
+      if (data.newPolicyId && (data.status === "success" || data.status === "partial")) {
+        const scopeTagIds = selectedScopeTags.map((t) => t.id);
+        if (scopeTagIds.length > 0 && !(scopeTagIds.length === 1 && scopeTagIds[0] === "0")) {
+          try {
+            await apiRequest("POST", `/api/settings-catalog/${data.newPolicyId}/scope-tags`, {
+              roleScopeTagIds: scopeTagIds,
+            });
+          } catch (err: any) {
+            toast({
+              title: "Scope Tag Warning",
+              description: `Policy converted but failed to apply scope tags: ${err.message}`,
+              variant: "destructive",
+            });
+          }
         }
       }
 
@@ -1210,6 +1358,168 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                     );
                   })()}
                 </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-sm font-medium flex items-center gap-1">
+                    <Tag className="h-4 w-4" /> Scope Tags
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowScopeTagPicker(!showScopeTagPicker)}
+                      data-testid="button-toggle-scope-tags"
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Add Tag
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowCreateTag(!showCreateTag)}
+                      data-testid="button-toggle-create-tag"
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Create
+                    </Button>
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Scope tags from the original policy will be copied. You can add, remove, or create new tags.
+                </p>
+
+                {selectedScopeTags.length > 0 ? (
+                  <div className="space-y-1">
+                    {selectedScopeTags.map((tag) => (
+                      <div
+                        key={tag.id}
+                        className="flex items-center gap-2 p-1.5 rounded-md bg-muted/50 text-sm"
+                        data-testid={`scope-tag-${tag.id}`}
+                      >
+                        <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="flex-1 min-w-0 truncate">{tag.displayName}</span>
+                        {tag.id === "0" && (
+                          <Badge variant="secondary" className="text-[9px] shrink-0">Default</Badge>
+                        )}
+                        {tag.id !== "0" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setSelectedScopeTags((prev) => prev.filter((t) => t.id !== tag.id))}
+                            data-testid={`remove-scope-tag-${tag.id}`}
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic py-1">No scope tags selected</p>
+                )}
+
+                {showScopeTagPicker && (
+                  <div className="space-y-2 p-2 rounded-md border bg-muted/30">
+                    <p className="text-xs font-medium">Available Scope Tags</p>
+                    {!availableScopeTags ? (
+                      <div className="flex items-center gap-2 p-2 text-xs text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Loading...
+                      </div>
+                    ) : availableScopeTags.length > 0 ? (
+                      <div className="max-h-[150px] overflow-y-auto space-y-1">
+                        {availableScopeTags
+                          .filter((t) => !selectedScopeTags.some((s) => s.id === t.id))
+                          .map((tag) => (
+                            <div
+                              key={tag.id}
+                              className="flex items-center gap-2 p-1.5 rounded-md cursor-pointer hover-elevate text-xs"
+                              onClick={() => {
+                                setSelectedScopeTags((prev) => [...prev, { id: tag.id, displayName: tag.displayName }]);
+                              }}
+                              data-testid={`add-scope-tag-${tag.id}`}
+                            >
+                              <Tag className="h-3 w-3 text-muted-foreground shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="leading-tight truncate">{tag.displayName}</p>
+                                {tag.description && (
+                                  <p className="text-muted-foreground truncate">{tag.description}</p>
+                                )}
+                              </div>
+                              {tag.isBuiltIn && (
+                                <Badge variant="secondary" className="text-[9px] shrink-0">Built-in</Badge>
+                              )}
+                              {!tag.isBuiltIn && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (confirm(`Delete scope tag "${tag.displayName}"? This cannot be undone.`)) {
+                                      deleteTagMutation.mutate(tag.id);
+                                    }
+                                  }}
+                                  data-testid={`delete-scope-tag-${tag.id}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              )}
+                              <Plus className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            </div>
+                          ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic p-1">No scope tags found</p>
+                    )}
+                  </div>
+                )}
+
+                {showCreateTag && (
+                  <div className="space-y-2 p-2 rounded-md border bg-muted/30">
+                    <p className="text-xs font-medium">Create New Scope Tag</p>
+                    <Input
+                      placeholder="Tag name"
+                      value={newTagName}
+                      onChange={(e) => setNewTagName(e.target.value)}
+                      className="text-sm"
+                      data-testid="input-new-tag-name"
+                    />
+                    <Input
+                      placeholder="Description (optional)"
+                      value={newTagDescription}
+                      onChange={(e) => setNewTagDescription(e.target.value)}
+                      className="text-sm"
+                      data-testid="input-new-tag-description"
+                    />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button
+                        size="sm"
+                        onClick={() => createTagMutation.mutate()}
+                        disabled={!newTagName.trim() || createTagMutation.isPending}
+                        data-testid="button-create-tag"
+                      >
+                        {createTagMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        ) : (
+                          <Plus className="h-3.5 w-3.5 mr-1" />
+                        )}
+                        Create
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => { setShowCreateTag(false); setNewTagName(""); setNewTagDescription(""); }}
+                        data-testid="button-cancel-create-tag"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <Separator />

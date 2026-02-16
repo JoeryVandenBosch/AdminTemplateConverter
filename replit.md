@@ -69,6 +69,11 @@ The storage layer currently uses an in-memory implementation (`MemStorage`), but
 - `POST /api/settings-catalog/:id/assignments` — Add/replace assignments on a Settings Catalog policy
 - `POST /api/policies/:id/preview-conversion` — Preview which settings will transfer successfully before converting
 - `POST /api/policies/convert` — Convert a policy to Settings Catalog format (body: policyId, newName, newDescription, includeAssignments)
+- `DELETE /api/policies/:id` — Permanently delete an Administrative Template policy
+- `GET /api/scope-tags` — List all role scope tags in the tenant
+- `POST /api/scope-tags` — Create a new role scope tag (body: displayName, description)
+- `DELETE /api/scope-tags/:id` — Delete a role scope tag
+- `POST /api/settings-catalog/:id/scope-tags` — Update scope tags on a Settings Catalog policy (body: roleScopeTagIds)
 
 ## External Dependencies
 
