@@ -68,6 +68,14 @@ The storage layer currently uses an in-memory implementation (`MemStorage`), but
 - `POST /api/auth/logout` — Destroys session and logs user out
 - `GET /api/auth/status` — Returns auth status, user info (displayName, email), tenantId
 
+### Analytics
+- **Server-side**: `server/analytics.ts` — PostgreSQL-based event tracking (sign-ins, conversions) with `analytics_events` table
+- **Admin Dashboard**: `/admin` page (`client/src/pages/admin.tsx`) — Protected by ADMIN_KEY, shows KPIs, charts, and recent events
+- **Google Analytics**: GA4 integration via `client/src/lib/analytics.ts` and `client/src/hooks/use-analytics.tsx` for page view tracking
+- **Environment Variables**:
+  - `ADMIN_KEY` — Required secret for accessing the admin analytics dashboard
+  - `VITE_GA_MEASUREMENT_ID` — Optional, Google Analytics 4 measurement ID (e.g., G-XXXXXXXXXX)
+
 ### API Endpoints (all require authentication via requireAuth middleware)
 - `GET /api/tenant-info` — Fetch connected Azure tenant information
 - `GET /api/policies` — List all Administrative Template policies
