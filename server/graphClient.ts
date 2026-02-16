@@ -298,25 +298,76 @@ export async function createSettingsCatalogPolicy(
   name: string,
   description: string,
   settings: any[]
-): Promise<any> {
-  const policyBody = {
+): Promise<{ policy: any; skippedSettings: Array<{ setting: any; error: string }> }> {
+  const buildPolicyBody = (settingsToInclude: any[]) => ({
     name,
     description,
     platforms: "windows10",
     technologies: "mdm",
-    settings,
+    settings: settingsToInclude,
     templateReference: {
       templateId: "",
       templateFamily: "none",
     },
-  };
+  });
 
-  return graphRequest(
-    accessToken,
-    `${GRAPH_BASE_URL}/deviceManagement/configurationPolicies`,
-    "POST",
-    policyBody
-  );
+  try {
+    const policy = await graphRequest(
+      accessToken,
+      `${GRAPH_BASE_URL}/deviceManagement/configurationPolicies`,
+      "POST",
+      buildPolicyBody(settings)
+    );
+    return { policy, skippedSettings: [] };
+  } catch (err: any) {
+    if (!err.message.includes("400") && !err.message.includes("Bad")) {
+      throw err;
+    }
+
+    log(`Batch creation failed with ${settings.length} settings, testing each setting individually`, "graph");
+
+    const skippedSettings: Array<{ setting: any; error: string }> = [];
+    const validSettings: any[] = [];
+
+    for (const setting of settings) {
+      try {
+        const testBody = buildPolicyBody([setting]);
+        testBody.name = `__validation_test_${Date.now()}`;
+        const testPolicy = await graphRequest(
+          accessToken,
+          `${GRAPH_BASE_URL}/deviceManagement/configurationPolicies`,
+          "POST",
+          testBody
+        );
+        validSettings.push(setting);
+        try {
+          await graphRequest(
+            accessToken,
+            `${GRAPH_BASE_URL}/deviceManagement/configurationPolicies/${testPolicy.id}`,
+            "DELETE"
+          );
+        } catch (_) {}
+      } catch (settingErr: any) {
+        const errorMsg = settingErr.message || "Unknown error";
+        const defId = setting?.settingInstance?.settingDefinitionId || "unknown";
+        log(`Setting ${defId} rejected: ${errorMsg}`, "graph");
+        skippedSettings.push({ setting, error: errorMsg });
+      }
+    }
+
+    if (validSettings.length === 0) {
+      throw new Error("No settings could be added to the policy. All settings failed validation with the Settings Catalog.");
+    }
+
+    const policy = await graphRequest(
+      accessToken,
+      `${GRAPH_BASE_URL}/deviceManagement/configurationPolicies`,
+      "POST",
+      buildPolicyBody(validSettings)
+    );
+
+    return { policy, skippedSettings };
+  }
 }
 
 export async function assignSettingsCatalogPolicy(

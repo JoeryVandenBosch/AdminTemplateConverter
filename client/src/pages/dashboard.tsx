@@ -754,9 +754,14 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
           description: `Created "${data.policyName}" with ${data.convertedSettings} settings.`,
         });
       } else if (data.status === "partial") {
+        const skippedCount = data.skippedByApi || 0;
+        const unmappedCount = data.failedSettings - skippedCount;
+        let desc = `Converted ${data.convertedSettings} of ${data.totalSettings} settings.`;
+        if (skippedCount > 0) desc += ` ${skippedCount} skipped (rejected by API).`;
+        if (unmappedCount > 0) desc += ` ${unmappedCount} could not be mapped.`;
         toast({
           title: "Partial Conversion",
-          description: `Converted ${data.convertedSettings} of ${data.totalSettings} settings. ${data.failedSettings} could not be mapped.`,
+          description: desc,
           variant: "destructive",
         });
       } else {
@@ -1588,7 +1593,7 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                 }
               />
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className={`grid gap-3 ${(result.skippedByApi || 0) > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
                 <Card>
                   <CardContent className="p-3 text-center">
                     <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
@@ -1597,10 +1602,20 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                     <p className="text-xs text-muted-foreground">Converted</p>
                   </CardContent>
                 </Card>
+                {(result.skippedByApi || 0) > 0 && (
+                  <Card>
+                    <CardContent className="p-3 text-center">
+                      <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                        {result.skippedByApi}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Skipped</p>
+                    </CardContent>
+                  </Card>
+                )}
                 <Card>
                   <CardContent className="p-3 text-center">
                     <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-                      {result.failedSettings}
+                      {result.failedSettings - (result.skippedByApi || 0)}
                     </p>
                     <p className="text-xs text-muted-foreground">Not Mapped</p>
                   </CardContent>
@@ -1628,6 +1643,8 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                         <div className="shrink-0 mt-0.5">
                           {detail.status === "converted" ? (
                             <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                          ) : detail.status === "skipped" ? (
+                            <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                           ) : detail.status === "not_found" ? (
                             <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                           ) : (
@@ -1638,10 +1655,10 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-sm font-medium leading-tight">{detail.settingName}</p>
                             <Badge
-                              variant={detail.status === "converted" ? "secondary" : detail.status === "not_found" ? "outline" : "destructive"}
-                              className={`text-[9px] shrink-0 ${detail.status === "converted" ? "text-emerald-700 dark:text-emerald-300" : ""}`}
+                              variant={detail.status === "converted" ? "secondary" : detail.status === "skipped" ? "outline" : detail.status === "not_found" ? "outline" : "destructive"}
+                              className={`text-[9px] shrink-0 ${detail.status === "converted" ? "text-emerald-700 dark:text-emerald-300" : detail.status === "skipped" ? "text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-700" : ""}`}
                             >
-                              {detail.status === "converted" ? "Transferred" : detail.status === "not_found" ? "Not Mapped" : "Error"}
+                              {detail.status === "converted" ? "Transferred" : detail.status === "skipped" ? "Skipped" : detail.status === "not_found" ? "Not Mapped" : "Error"}
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground">{detail.categoryPath}</p>
@@ -1657,7 +1674,10 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                               <span className="text-emerald-700 dark:text-emerald-300 truncate">{detail.mappedTo}</span>
                             </div>
                           )}
-                          {detail.status !== "converted" && detail.error && (
+                          {detail.status === "skipped" && detail.error && (
+                            <p className="text-xs text-orange-700 dark:text-orange-300">{detail.error}</p>
+                          )}
+                          {detail.status !== "converted" && detail.status !== "skipped" && detail.error && (
                             <p className="text-xs text-destructive">{detail.error}</p>
                           )}
                         </div>

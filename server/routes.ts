@@ -382,15 +382,42 @@ export async function registerRoutes(
       }
 
       try {
-        const newPolicy = await createSettingsCatalogPolicy(
+        const { policy: newPolicy, skippedSettings } = await createSettingsCatalogPolicy(
           accessToken,
           newName,
           newDescription || `Converted from Administrative Template`,
           catalogSettings
         );
 
+        if (skippedSettings.length > 0) {
+          for (const skipped of skippedSettings) {
+            const defId = skipped.setting?.settingInstance?.settingDefinitionId || "unknown";
+            const existingDetail = conversionDetails.find(
+              (d: any) => d.status === "converted" && d.mappedDefinitionId === defId
+            );
+            if (existingDetail) {
+              existingDetail.status = "skipped";
+              existingDetail.error = `Setting rejected by Graph API during policy creation. It may have a platform mismatch or type incompatibility.`;
+            } else {
+              conversionDetails.push({
+                settingName: defId,
+                categoryPath: "Unknown",
+                status: "skipped",
+                error: `Setting rejected by Graph API during policy creation.`,
+              });
+            }
+          }
+        }
+
+        const actualConverted = conversionDetails.filter(
+          (d: any) => d.status === "converted"
+        ).length;
+        const actualFailed = conversionDetails.filter(
+          (d: any) => d.status !== "converted"
+        ).length;
+
         log(
-          `Successfully created Settings Catalog policy: ${newPolicy.id}`,
+          `Successfully created Settings Catalog policy: ${newPolicy.id} (${actualConverted} settings, ${skippedSettings.length} skipped)`,
           "routes"
         );
 
@@ -419,7 +446,7 @@ export async function registerRoutes(
           }
         }
 
-        const status = failedCount === 0 ? "success" : "partial";
+        const status = actualFailed === 0 ? "success" : "partial";
 
         trackEvent("conversion", {
           tenantId: req.session.tenantId,
@@ -429,8 +456,9 @@ export async function registerRoutes(
           metadata: {
             status,
             totalSettings: settings.length,
-            convertedSettings: convertedCount,
-            failedSettings: failedCount,
+            convertedSettings: actualConverted,
+            failedSettings: actualFailed,
+            skippedByApi: skippedSettings.length,
             newPolicyId: newPolicy.id,
           },
         });
@@ -440,8 +468,9 @@ export async function registerRoutes(
           status,
           newPolicyId: newPolicy.id,
           totalSettings: settings.length,
-          convertedSettings: convertedCount,
-          failedSettings: failedCount,
+          convertedSettings: actualConverted,
+          failedSettings: actualFailed,
+          skippedByApi: skippedSettings.length,
           details: conversionDetails,
         });
       } catch (err: any) {

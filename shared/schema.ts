@@ -63,6 +63,7 @@ export interface ConversionResult {
   totalSettings: number;
   convertedSettings: number;
   failedSettings: number;
+  skippedByApi?: number;
   details: ConversionDetail[];
   error?: string;
 }
@@ -70,7 +71,7 @@ export interface ConversionResult {
 export interface ConversionDetail {
   settingName: string;
   categoryPath: string;
-  status: "converted" | "not_found" | "error";
+  status: "converted" | "not_found" | "error" | "skipped";
   originalValue?: string;
   mappedDefinitionId?: string;
   mappedTo?: string;
