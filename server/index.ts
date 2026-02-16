@@ -1,7 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from "url";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -32,15 +31,10 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
-const __server_dirname = typeof import.meta.dirname === "string" ? import.meta.dirname : path.dirname(fileURLToPath(import.meta.url));
-const secCopilotPaths = [
+const secCopilotDir = [
   path.resolve(process.cwd(), "security-copilot"),
-  path.resolve(__server_dirname, "..", "security-copilot"),
-  path.resolve(__server_dirname, "security-copilot"),
-];
-const secCopilotDir = secCopilotPaths.find((p) => {
-  try { return fs.existsSync(p); } catch { return false; }
-}) || secCopilotPaths[0];
+  path.resolve(process.cwd(), "dist", "security-copilot"),
+].find((p) => fs.existsSync(p)) || path.resolve(process.cwd(), "security-copilot");
 
 app.use("/security-copilot", (_req, res, next) => {
   res.set("Access-Control-Allow-Origin", "*");
