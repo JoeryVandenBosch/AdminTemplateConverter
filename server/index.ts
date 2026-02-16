@@ -1,5 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -30,7 +32,28 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
-app.use("/security-copilot", express.static(path.resolve(process.cwd(), "security-copilot")));
+const __server_dirname = typeof import.meta.dirname === "string" ? import.meta.dirname : path.dirname(fileURLToPath(import.meta.url));
+const secCopilotPaths = [
+  path.resolve(process.cwd(), "security-copilot"),
+  path.resolve(__server_dirname, "..", "security-copilot"),
+  path.resolve(__server_dirname, "security-copilot"),
+];
+const secCopilotDir = secCopilotPaths.find((p) => {
+  try { return fs.existsSync(p); } catch { return false; }
+}) || secCopilotPaths[0];
+
+app.use("/security-copilot", (_req, res, next) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  next();
+}, express.static(secCopilotDir, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith(".yaml") || filePath.endsWith(".yml")) {
+      res.setHeader("Content-Type", "text/yaml; charset=utf-8");
+    }
+  },
+}));
 
 setupSession(app);
 
