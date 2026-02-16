@@ -8,6 +8,9 @@ import {
   findMatchingSettingDefinition,
   createSettingsCatalogPolicy,
   assignSettingsCatalogPolicy,
+  deleteAdminTemplatePolicyAssignments,
+  resolveGroupNames,
+  searchGroups,
   buildSettingsCatalogSetting,
 } from "./graphClient";
 import { convertPolicySchema } from "@shared/schema";
@@ -52,6 +55,92 @@ export async function registerRoutes(
       res.json(assignments);
     } catch (error: any) {
       log(`Failed to fetch assignments: ${error.message}`, "routes");
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/policies/:id/assignments/resolve", async (req, res) => {
+    try {
+      const assignments = await getPolicyAssignments(req.params.id);
+      const groupIds = assignments
+        .map((a: any) => a.target?.groupId)
+        .filter(Boolean);
+
+      const groupNames = groupIds.length > 0 ? await resolveGroupNames(groupIds) : {};
+
+      const resolved = assignments.map((a: any) => {
+        const target = a.target || {};
+        const odataType = target["@odata.type"] || "";
+        let targetType = "Unknown";
+        let targetName = "";
+
+        if (odataType.includes("allDevicesAssignmentTarget")) {
+          targetType = "All Devices";
+          targetName = "All Devices";
+        } else if (odataType.includes("allLicensedUsersAssignmentTarget")) {
+          targetType = "All Users";
+          targetName = "All Licensed Users";
+        } else if (odataType.includes("exclusionGroupAssignmentTarget")) {
+          targetType = "Excluded Group";
+          targetName = target.groupId ? groupNames[target.groupId] || target.groupId : "Unknown Group";
+        } else if (odataType.includes("groupAssignmentTarget")) {
+          targetType = "Included Group";
+          targetName = target.groupId ? groupNames[target.groupId] || target.groupId : "Unknown Group";
+        }
+
+        return {
+          id: a.id,
+          targetType,
+          targetName,
+          groupId: target.groupId || null,
+          filterType: target.deviceAndAppManagementAssignmentFilterType || null,
+          filterId: target.deviceAndAppManagementAssignmentFilterId || null,
+        };
+      });
+
+      res.json(resolved);
+    } catch (error: any) {
+      log(`Failed to resolve assignments: ${error.message}`, "routes");
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/groups/search", async (req, res) => {
+    try {
+      const query = (req.query.q as string) || "";
+      if (query.length < 2) {
+        return res.json([]);
+      }
+      const groups = await searchGroups(query);
+      res.json(groups);
+    } catch (error: any) {
+      log(`Failed to search groups: ${error.message}`, "routes");
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/policies/:id/assignments", async (req, res) => {
+    try {
+      await deleteAdminTemplatePolicyAssignments(req.params.id);
+      log(`Deleted assignments for policy ${req.params.id}`, "routes");
+      res.json({ success: true });
+    } catch (error: any) {
+      log(`Failed to delete assignments: ${error.message}`, "routes");
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/settings-catalog/:id/assignments", async (req, res) => {
+    try {
+      const assignments = req.body.assignments;
+      if (!Array.isArray(assignments)) {
+        return res.status(400).json({ message: "assignments must be an array" });
+      }
+      await assignSettingsCatalogPolicy(req.params.id, assignments);
+      log(`Added ${assignments.length} assignments to settings catalog policy ${req.params.id}`, "routes");
+      res.json({ success: true });
+    } catch (error: any) {
+      log(`Failed to add assignments: ${error.message}`, "routes");
       res.status(500).json({ message: error.message });
     }
   });

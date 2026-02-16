@@ -374,6 +374,65 @@ export async function assignSettingsCatalogPolicy(
   );
 }
 
+export async function resolveGroupNames(
+  groupIds: string[]
+): Promise<Record<string, string>> {
+  const result: Record<string, string> = {};
+  const uniqueIds = Array.from(new Set(groupIds));
+
+  await Promise.all(
+    uniqueIds.map(async (id) => {
+      try {
+        const group = await graphRequest(
+          `https://graph.microsoft.com/v1.0/groups/${id}?$select=id,displayName`
+        );
+        result[id] = group.displayName || id;
+      } catch {
+        result[id] = id;
+      }
+    })
+  );
+
+  return result;
+}
+
+export async function searchGroups(query: string): Promise<any[]> {
+  try {
+    const cleanQuery = query.replace(/'/g, "''");
+    const token = await getAccessToken();
+    const response = await fetch(
+      `https://graph.microsoft.com/v1.0/groups?$search="displayName:${encodeURIComponent(cleanQuery)}"&$select=id,displayName,description,groupTypes,mailEnabled,securityEnabled&$top=20&$count=true`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          ConsistencyLevel: "eventual",
+        },
+      }
+    );
+    if (!response.ok) {
+      const errorText = await response.text();
+      log(`Group search API error: ${response.status} - ${errorText}`, "graph");
+      return [];
+    }
+    const data = await response.json();
+    return data.value || [];
+  } catch (err: any) {
+    log(`Group search failed for "${query}": ${err.message}`, "graph");
+    return [];
+  }
+}
+
+export async function deleteAdminTemplatePolicyAssignments(
+  policyId: string
+): Promise<void> {
+  await graphRequest(
+    `${GRAPH_BASE_URL}/deviceManagement/groupPolicyConfigurations/${policyId}/assign`,
+    "POST",
+    { assignments: [] }
+  );
+}
+
 export function buildSettingsCatalogSetting(
   matchedDefinition: any,
   enabled: boolean,

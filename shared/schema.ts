@@ -86,6 +86,24 @@ export interface PolicyAssignment {
   };
 }
 
+export interface ResolvedAssignment {
+  id: string;
+  targetType: "Included Group" | "Excluded Group" | "All Devices" | "All Users" | "Unknown";
+  targetName: string;
+  groupId: string | null;
+  filterType: string | null;
+  filterId: string | null;
+}
+
+export interface AzureGroup {
+  id: string;
+  displayName: string;
+  description: string | null;
+  groupTypes: string[];
+  mailEnabled: boolean;
+  securityEnabled: boolean;
+}
+
 export interface TenantInfo {
   connected: boolean;
   tenantId?: string;

@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,12 +39,17 @@ import {
   Settings2,
   Monitor,
   User,
+  Users,
   ChevronRight,
   Loader2,
   FileText,
   Clock,
   Zap,
   Info,
+  Trash2,
+  Plus,
+  UserMinus,
+  UserPlus,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type {
@@ -53,6 +58,8 @@ import type {
   TenantInfo,
   ConversionResult,
   PolicyAssignment,
+  ResolvedAssignment,
+  AzureGroup,
 } from "@shared/schema";
 
 function ConnectionStatus() {
@@ -141,13 +148,24 @@ interface PolicyDetailProps {
   onConvert: () => void;
 }
 
+function AssignmentTargetIcon({ targetType }: { targetType: string }) {
+  if (targetType === "All Devices") return <Monitor className="h-3.5 w-3.5" />;
+  if (targetType === "All Users") return <Users className="h-3.5 w-3.5" />;
+  if (targetType === "Excluded Group") return <UserMinus className="h-3.5 w-3.5" />;
+  return <UserPlus className="h-3.5 w-3.5" />;
+}
+
 function PolicyDetail({ policy, onClose, onConvert }: PolicyDetailProps) {
   const { data: settings, isLoading } = useQuery<DefinitionValue[]>({
     queryKey: ["/api/policies", policy.id, "settings"],
   });
 
-  const { data: assignments } = useQuery<PolicyAssignment[]>({
-    queryKey: ["/api/policies", policy.id, "assignments"],
+  const { data: resolvedAssignments, isLoading: assignmentsLoading } = useQuery<ResolvedAssignment[]>({
+    queryKey: ["/api/policies", policy.id, "assignments", "resolve"],
+    queryFn: async () => {
+      const res = await apiRequest("POST", `/api/policies/${policy.id}/assignments/resolve`);
+      return res.json();
+    },
   });
 
   return (
@@ -172,17 +190,15 @@ function PolicyDetail({ policy, onClose, onConvert }: PolicyDetailProps) {
           <FileText className="h-3 w-3" />
           {settings?.length ?? "..."} settings
         </span>
-        {assignments && assignments.length > 0 && (
-          <span className="flex items-center gap-1">
-            <User className="h-3 w-3" />
-            {assignments.length} assignment{assignments.length !== 1 ? "s" : ""}
-          </span>
-        )}
+        <span className="flex items-center gap-1">
+          <Users className="h-3 w-3" />
+          {resolvedAssignments?.length ?? "..."} assignment{(resolvedAssignments?.length ?? 0) !== 1 ? "s" : ""}
+        </span>
       </div>
 
       <Separator />
 
-      <ScrollArea className="flex-1 min-h-0 max-h-[400px]">
+      <ScrollArea className="flex-1 min-h-0 max-h-[350px]">
         {isLoading ? (
           <div className="space-y-3 p-1">
             {[1, 2, 3].map((i) => (
@@ -260,6 +276,46 @@ function PolicyDetail({ policy, onClose, onConvert }: PolicyDetailProps) {
 
       <Separator />
 
+      <div className="py-2">
+        <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+          <Users className="h-3 w-3" /> Assignments
+        </p>
+        {assignmentsLoading ? (
+          <div className="space-y-2">
+            {[1, 2].map((i) => (
+              <Skeleton key={i} className="h-8 w-full rounded-md" />
+            ))}
+          </div>
+        ) : resolvedAssignments && resolvedAssignments.length > 0 ? (
+          <div className="space-y-1">
+            {resolvedAssignments.map((assignment) => (
+              <div
+                key={assignment.id}
+                className="flex items-center gap-2 p-2 rounded-md bg-muted/50"
+                data-testid={`assignment-item-${assignment.id}`}
+              >
+                <div className={`shrink-0 ${assignment.targetType === "Excluded Group" ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
+                  <AssignmentTargetIcon targetType={assignment.targetType} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm leading-tight truncate">{assignment.targetName}</p>
+                </div>
+                <Badge
+                  variant={assignment.targetType === "Excluded Group" ? "destructive" : "secondary"}
+                  className="text-[10px] shrink-0"
+                >
+                  {assignment.targetType}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground italic py-1">No assignments</p>
+        )}
+      </div>
+
+      <Separator />
+
       <DialogFooter className="gap-2">
         <Button variant="outline" onClick={onClose} data-testid="button-close-detail">
           Close
@@ -278,6 +334,81 @@ interface ConversionDialogProps {
   onClose: () => void;
 }
 
+function GroupSearch({ onSelectGroup, existingGroupIds }: { onSelectGroup: (group: AzureGroup) => void; existingGroupIds: string[] }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedQuery(value), 300);
+  };
+
+  const { data: groups, isLoading: searchLoading } = useQuery<AzureGroup[]>({
+    queryKey: ["/api/groups/search", debouncedQuery],
+    queryFn: async () => {
+      const res = await fetch(`/api/groups/search?q=${encodeURIComponent(debouncedQuery)}`);
+      if (!res.ok) throw new Error("Failed to search groups");
+      return res.json();
+    },
+    enabled: debouncedQuery.length >= 2,
+  });
+
+  const filteredGroups = groups?.filter((g) => !existingGroupIds.includes(g.id));
+
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <Input
+          placeholder="Search for groups..."
+          value={searchQuery}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          className="pl-8 text-sm"
+          data-testid="input-search-groups"
+        />
+      </div>
+      {searchLoading && debouncedQuery.length >= 2 && (
+        <div className="flex items-center gap-2 p-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Searching...
+        </div>
+      )}
+      {filteredGroups && filteredGroups.length > 0 && (
+        <ScrollArea className="max-h-[150px]">
+          <div className="space-y-1">
+            {filteredGroups.map((group) => (
+              <div
+                key={group.id}
+                className="flex items-center gap-2 p-2 rounded-md cursor-pointer hover-elevate"
+                onClick={() => {
+                  onSelectGroup(group);
+                  setSearchQuery("");
+                  setDebouncedQuery("");
+                }}
+                data-testid={`group-result-${group.id}`}
+              >
+                <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm leading-tight truncate">{group.displayName}</p>
+                  {group.description && (
+                    <p className="text-xs text-muted-foreground truncate">{group.description}</p>
+                  )}
+                </div>
+                <Plus className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      )}
+      {filteredGroups && filteredGroups.length === 0 && debouncedQuery.length >= 2 && !searchLoading && (
+        <p className="text-xs text-muted-foreground italic p-2">No groups found</p>
+      )}
+    </div>
+  );
+}
+
 function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
   const { toast } = useToast();
   const [newName, setNewName] = useState(
@@ -288,18 +419,68 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
   );
   const [includeAssignments, setIncludeAssignments] = useState(false);
   const [result, setResult] = useState<ConversionResult | null>(null);
+  const [showAddGroups, setShowAddGroups] = useState(false);
+  const [extraAssignments, setExtraAssignments] = useState<Array<{ groupId: string; groupName: string; type: "include" | "exclude" }>>([]);
+
+  const { data: resolvedAssignments } = useQuery<ResolvedAssignment[]>({
+    queryKey: ["/api/policies", policy.id, "assignments", "resolve"],
+    queryFn: async () => {
+      const res = await apiRequest("POST", `/api/policies/${policy.id}/assignments/resolve`);
+      return res.json();
+    },
+  });
 
   const convertMutation = useMutation({
     mutationFn: async () => {
+      const shouldBackendCopyAssignments = includeAssignments && extraAssignments.length === 0;
       const res = await apiRequest("POST", "/api/policies/convert", {
         policyId: policy.id,
         newName,
         newDescription,
-        includeAssignments,
+        includeAssignments: shouldBackendCopyAssignments,
       });
       return (await res.json()) as ConversionResult;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      if (extraAssignments.length > 0 && data.newPolicyId && (data.status === "success" || data.status === "partial")) {
+        try {
+          const copiedAssignments = includeAssignments && resolvedAssignments
+            ? resolvedAssignments.map((a) => ({
+                target: a.targetType === "All Devices"
+                  ? { "@odata.type": "#microsoft.graph.allDevicesAssignmentTarget" }
+                  : a.targetType === "All Users"
+                    ? { "@odata.type": "#microsoft.graph.allLicensedUsersAssignmentTarget" }
+                    : a.targetType === "Excluded Group"
+                      ? { "@odata.type": "#microsoft.graph.exclusionGroupAssignmentTarget", groupId: a.groupId }
+                      : { "@odata.type": "#microsoft.graph.groupAssignmentTarget", groupId: a.groupId },
+              }))
+            : [];
+
+          const extraMapped = extraAssignments.map((ea) => ({
+            target: ea.type === "exclude"
+              ? { "@odata.type": "#microsoft.graph.exclusionGroupAssignmentTarget", groupId: ea.groupId }
+              : { "@odata.type": "#microsoft.graph.groupAssignmentTarget", groupId: ea.groupId },
+          }));
+
+          const allAssignments = [...copiedAssignments, ...extraMapped];
+
+          await apiRequest("POST", `/api/settings-catalog/${data.newPolicyId}/assignments`, {
+            assignments: allAssignments,
+          });
+
+          toast({
+            title: "Extra Assignments Added",
+            description: `Added ${extraAssignments.length} extra assignment(s) to the new policy.`,
+          });
+        } catch (err: any) {
+          toast({
+            title: "Assignment Warning",
+            description: `Policy converted but failed to add extra assignments: ${err.message}`,
+            variant: "destructive",
+          });
+        }
+      }
+
       setResult(data);
       if (data.status === "success") {
         toast({
@@ -330,7 +511,50 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
     },
   });
 
+  const deleteAssignmentsMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/policies/${policy.id}/assignments`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Assignments Deleted",
+        description: `All assignments removed from "${policy.displayName}".`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/policies", policy.id, "assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/policies", policy.id, "assignments", "resolve"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/policies"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const isConverting = convertMutation.isPending;
+
+  const handleAddGroup = (group: AzureGroup) => {
+    if (!extraAssignments.find((a) => a.groupId === group.id)) {
+      setExtraAssignments([...extraAssignments, { groupId: group.id, groupName: group.displayName, type: "include" }]);
+    }
+  };
+
+  const handleRemoveExtra = (groupId: string) => {
+    setExtraAssignments(extraAssignments.filter((a) => a.groupId !== groupId));
+  };
+
+  const handleToggleExtraType = (groupId: string) => {
+    setExtraAssignments(extraAssignments.map((a) =>
+      a.groupId === groupId ? { ...a, type: a.type === "include" ? "exclude" : "include" } : a
+    ));
+  };
+
+  const existingGroupIds = [
+    ...(resolvedAssignments?.map((a) => a.groupId).filter(Boolean) as string[] || []),
+    ...extraAssignments.map((a) => a.groupId),
+  ];
 
   return (
     <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
@@ -347,77 +571,165 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
 
       {!result ? (
         <>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="newName">
-                New Policy Name
-              </label>
-              <Input
-                id="newName"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="Enter a name for the new policy"
-                data-testid="input-new-name"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="newDescription">
-                Description (optional)
-              </label>
-              <Input
-                id="newDescription"
-                value={newDescription}
-                onChange={(e) => setNewDescription(e.target.value)}
-                placeholder="Enter a description"
-                data-testid="input-new-description"
-              />
-            </div>
+          <ScrollArea className="flex-1 min-h-0 max-h-[60vh]">
+            <div className="space-y-4 py-2 pr-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium" htmlFor="newName">
+                  New Policy Name
+                </label>
+                <Input
+                  id="newName"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Enter a name for the new policy"
+                  data-testid="input-new-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium" htmlFor="newDescription">
+                  Description (optional)
+                </label>
+                <Input
+                  id="newDescription"
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                  placeholder="Enter a description"
+                  data-testid="input-new-description"
+                />
+              </div>
 
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="includeAssignments"
-                checked={includeAssignments}
-                onCheckedChange={(checked) =>
-                  setIncludeAssignments(checked === true)
-                }
-                data-testid="checkbox-include-assignments"
-              />
-              <label
-                htmlFor="includeAssignments"
-                className="text-sm cursor-pointer"
-              >
-                Copy group assignments to the new policy
-              </label>
-            </div>
+              <Separator />
 
-            <Card className="bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
-              <CardContent className="p-3">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-                  <div className="text-xs text-amber-800 dark:text-amber-200">
-                    <p className="font-medium mb-1">Before converting:</p>
-                    <ul className="list-disc pl-4 space-y-0.5">
-                      <li>
-                        A new Settings Catalog policy will be created with
-                        matched settings
-                      </li>
-                      <li>
-                        The original Administrative Template policy will not be
-                        deleted
-                      </li>
-                      <li>
-                        Some settings may not have a direct mapping and will be
-                        skipped
-                      </li>
-                      <li>
-                        Review the new policy before assigning it to groups
-                      </li>
-                    </ul>
-                  </div>
+              <div className="space-y-3">
+                <p className="text-sm font-medium flex items-center gap-1">
+                  <Users className="h-4 w-4" /> Assignments
+                </p>
+
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="includeAssignments"
+                    checked={includeAssignments}
+                    onCheckedChange={(checked) =>
+                      setIncludeAssignments(checked === true)
+                    }
+                    data-testid="checkbox-include-assignments"
+                  />
+                  <label
+                    htmlFor="includeAssignments"
+                    className="text-sm cursor-pointer"
+                  >
+                    Copy existing assignments to the new policy
+                  </label>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+
+                {includeAssignments && resolvedAssignments && resolvedAssignments.length > 0 && (
+                  <div className="space-y-1 pl-6">
+                    {resolvedAssignments.map((assignment) => (
+                      <div
+                        key={assignment.id}
+                        className="flex items-center gap-2 p-1.5 rounded-md bg-muted/50 text-sm"
+                      >
+                        <div className={`shrink-0 ${assignment.targetType === "Excluded Group" ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
+                          <AssignmentTargetIcon targetType={assignment.targetType} />
+                        </div>
+                        <span className="flex-1 min-w-0 truncate">{assignment.targetName}</span>
+                        <Badge
+                          variant={assignment.targetType === "Excluded Group" ? "destructive" : "secondary"}
+                          className="text-[10px] shrink-0"
+                        >
+                          {assignment.targetType}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <Separator className="my-2" />
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <p className="text-sm font-medium">Add Extra Assignments</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAddGroups(!showAddGroups)}
+                      data-testid="button-toggle-add-groups"
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Add Group
+                    </Button>
+                  </div>
+
+                  {showAddGroups && (
+                    <GroupSearch onSelectGroup={handleAddGroup} existingGroupIds={existingGroupIds} />
+                  )}
+
+                  {extraAssignments.length > 0 && (
+                    <div className="space-y-1">
+                      {extraAssignments.map((ea) => (
+                        <div
+                          key={ea.groupId}
+                          className="flex items-center gap-2 p-1.5 rounded-md bg-muted/50 text-sm"
+                          data-testid={`extra-assignment-${ea.groupId}`}
+                        >
+                          <div className={`shrink-0 ${ea.type === "exclude" ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
+                            {ea.type === "exclude" ? <UserMinus className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
+                          </div>
+                          <span className="flex-1 min-w-0 truncate">{ea.groupName}</span>
+                          <Badge
+                            variant={ea.type === "exclude" ? "destructive" : "secondary"}
+                            className="text-[10px] shrink-0 cursor-pointer"
+                            onClick={() => handleToggleExtraType(ea.groupId)}
+                            data-testid={`toggle-type-${ea.groupId}`}
+                          >
+                            {ea.type === "exclude" ? "Exclude" : "Include"}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemoveExtra(ea.groupId)}
+                            data-testid={`remove-extra-${ea.groupId}`}
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+
+              <Card className="bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+                <CardContent className="p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                    <div className="text-xs text-amber-800 dark:text-amber-200">
+                      <p className="font-medium mb-1">Before converting:</p>
+                      <ul className="list-disc pl-4 space-y-0.5">
+                        <li>
+                          A new Settings Catalog policy will be created with
+                          matched settings
+                        </li>
+                        <li>
+                          The original Administrative Template policy will not be
+                          deleted
+                        </li>
+                        <li>
+                          Some settings may not have a direct mapping and will be
+                          skipped
+                        </li>
+                        <li>
+                          Review the new policy before assigning it to groups
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </ScrollArea>
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={onClose} disabled={isConverting} data-testid="button-cancel-convert">
@@ -444,71 +756,71 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
         </>
       ) : (
         <>
-          <div className="space-y-4 py-2">
-            <div className="flex items-center gap-3">
-              {result.status === "success" ? (
-                <div className="flex items-center justify-center h-10 w-10 rounded-md bg-emerald-500/10 dark:bg-emerald-500/20">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+          <ScrollArea className="flex-1 min-h-0 max-h-[60vh]">
+            <div className="space-y-4 py-2 pr-3">
+              <div className="flex items-center gap-3">
+                {result.status === "success" ? (
+                  <div className="flex items-center justify-center h-10 w-10 rounded-md bg-emerald-500/10 dark:bg-emerald-500/20">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                ) : result.status === "partial" ? (
+                  <div className="flex items-center justify-center h-10 w-10 rounded-md bg-amber-500/10 dark:bg-amber-500/20">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-10 w-10 rounded-md bg-destructive/10 dark:bg-destructive/20">
+                    <XCircle className="h-5 w-5 text-destructive" />
+                  </div>
+                )}
+                <div>
+                  <p className="font-medium">
+                    {result.status === "success"
+                      ? "Conversion Complete"
+                      : result.status === "partial"
+                        ? "Partial Conversion"
+                        : "Conversion Failed"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {result.convertedSettings} of {result.totalSettings} settings
+                    converted
+                  </p>
                 </div>
-              ) : result.status === "partial" ? (
-                <div className="flex items-center justify-center h-10 w-10 rounded-md bg-amber-500/10 dark:bg-amber-500/20">
-                  <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-10 w-10 rounded-md bg-destructive/10 dark:bg-destructive/20">
-                  <XCircle className="h-5 w-5 text-destructive" />
-                </div>
-              )}
-              <div>
-                <p className="font-medium">
-                  {result.status === "success"
-                    ? "Conversion Complete"
-                    : result.status === "partial"
-                      ? "Partial Conversion"
-                      : "Conversion Failed"}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {result.convertedSettings} of {result.totalSettings} settings
-                  converted
-                </p>
               </div>
-            </div>
 
-            <Progress
-              value={
-                result.totalSettings > 0
-                  ? (result.convertedSettings / result.totalSettings) * 100
-                  : 0
-              }
-            />
+              <Progress
+                value={
+                  result.totalSettings > 0
+                    ? (result.convertedSettings / result.totalSettings) * 100
+                    : 0
+                }
+              />
 
-            <div className="grid grid-cols-3 gap-3">
-              <Card>
-                <CardContent className="p-3 text-center">
-                  <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                    {result.convertedSettings}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Converted</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-3 text-center">
-                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-                    {result.failedSettings}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Not Mapped</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-3 text-center">
-                  <p className="text-2xl font-bold">{result.totalSettings}</p>
-                  <p className="text-xs text-muted-foreground">Total</p>
-                </CardContent>
-              </Card>
-            </div>
+              <div className="grid grid-cols-3 gap-3">
+                <Card>
+                  <CardContent className="p-3 text-center">
+                    <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                      {result.convertedSettings}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Converted</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3 text-center">
+                    <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                      {result.failedSettings}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Not Mapped</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3 text-center">
+                    <p className="text-2xl font-bold">{result.totalSettings}</p>
+                    <p className="text-xs text-muted-foreground">Total</p>
+                  </CardContent>
+                </Card>
+              </div>
 
-            {result.details && result.details.length > 0 && (
-              <ScrollArea className="max-h-[200px]">
+              {result.details && result.details.length > 0 && (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -539,17 +851,65 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                     ))}
                   </TableBody>
                 </Table>
-              </ScrollArea>
-            )}
+              )}
 
-            {result.error && (
-              <Card className="bg-destructive/5 border-destructive/20">
-                <CardContent className="p-3">
-                  <p className="text-sm text-destructive">{result.error}</p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+              {result.error && (
+                <Card className="bg-destructive/5 border-destructive/20">
+                  <CardContent className="p-3">
+                    <p className="text-sm text-destructive">{result.error}</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {(result.status === "success" || result.status === "partial") && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium">Post-Conversion Actions</p>
+                    <Card className="bg-destructive/5 dark:bg-destructive/10 border-destructive/20">
+                      <CardContent className="p-3">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <div className="flex items-start gap-2">
+                            <Trash2 className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-sm font-medium">Delete Original Assignments</p>
+                              <p className="text-xs text-muted-foreground">
+                                Remove all group assignments from the original policy to prevent conflicts
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => deleteAssignmentsMutation.mutate()}
+                            disabled={deleteAssignmentsMutation.isPending || deleteAssignmentsMutation.isSuccess}
+                            data-testid="button-delete-original-assignments"
+                          >
+                            {deleteAssignmentsMutation.isPending ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                                Deleting...
+                              </>
+                            ) : deleteAssignmentsMutation.isSuccess ? (
+                              <>
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                                Deleted
+                              </>
+                            ) : (
+                              <>
+                                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                                Delete Assignments
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </>
+              )}
+            </div>
+          </ScrollArea>
 
           <DialogFooter>
             <Button onClick={onClose} data-testid="button-close-result">
