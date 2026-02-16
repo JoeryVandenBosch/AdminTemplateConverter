@@ -7,12 +7,10 @@ Descriptor:
     convert, and manage Intune policy migrations through natural language interaction. Works with any
     Microsoft 365 tenant — no app registration or manual setup required.
   SupportedAuthTypes:
-    - OAuthAuthorizationCodeFlow
+    - AADDelegated
   Authorization:
-    Type: OAuthAuthorizationCodeFlow
-    AuthorizationEndpoint: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
-    TokenEndpoint: https://login.microsoftonline.com/common/oauth2/v2.0/token
-    Scopes: DeviceManagementConfiguration.ReadWrite.All Group.Read.All DeviceManagementRBAC.ReadWrite.All offline_access openid profile email
+    Type: AADDelegated
+    EntraScopes: https://graph.microsoft.com/.default
 
 SkillGroups:
   - Format: AGENT
