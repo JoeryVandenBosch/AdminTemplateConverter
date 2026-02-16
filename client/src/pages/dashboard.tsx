@@ -52,6 +52,7 @@ import {
   UserPlus,
   Filter,
   SlidersHorizontal,
+  RotateCcw,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type {
@@ -937,6 +938,174 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                       ))}
                     </div>
                   )}
+                </div>
+
+                <Separator className="my-2" />
+
+                <div className="space-y-2">
+                  <p className="text-sm font-medium flex items-center gap-1">
+                    <Filter className="h-4 w-4" /> Assignment Filters
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Manage filters on copied and extra assignments. Filters control which devices an assignment targets.
+                  </p>
+
+                  {(() => {
+                    const allItems: Array<{
+                      id: string;
+                      name: string;
+                      source: "copied" | "extra";
+                      currentFilterName: string | null;
+                      currentFilterType: string | null;
+                      hasOverride: boolean;
+                      overrideFilterName?: string;
+                      overrideFilterType?: string;
+                      isRemoved: boolean;
+                    }> = [];
+
+                    if (includeAssignments && resolvedAssignments) {
+                      resolvedAssignments.forEach((a) => {
+                        const override = copiedFilterOverrides[a.id];
+                        allItems.push({
+                          id: a.id,
+                          name: a.targetName,
+                          source: "copied",
+                          currentFilterName: a.filterDisplayName || null,
+                          currentFilterType: a.filterType || null,
+                          hasOverride: !!override,
+                          overrideFilterName: override?.filterName,
+                          overrideFilterType: override?.filterType,
+                          isRemoved: removedCopiedFilters.has(a.id),
+                        });
+                      });
+                    }
+
+                    extraAssignments.forEach((ea) => {
+                      allItems.push({
+                        id: ea.groupId,
+                        name: ea.groupName,
+                        source: "extra",
+                        currentFilterName: ea.filterName,
+                        currentFilterType: ea.filterType,
+                        hasOverride: false,
+                        isRemoved: false,
+                      });
+                    });
+
+                    if (allItems.length === 0) {
+                      return (
+                        <p className="text-xs text-muted-foreground italic py-1">
+                          Enable "Copy existing assignments" or add extra assignments to manage filters.
+                        </p>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-1">
+                        {allItems.map((item) => (
+                          <div
+                            key={`filter-${item.id}`}
+                            className="p-1.5 rounded-md bg-muted/50"
+                            data-testid={`filter-mgmt-${item.id}`}
+                          >
+                            <div className="flex items-center gap-2 text-sm">
+                              <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              <span className="flex-1 min-w-0 truncate">{item.name}</span>
+                              <Badge variant="outline" className="text-[9px] shrink-0">
+                                {item.source === "copied" ? "Copied" : "Extra"}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-1 mt-1 pl-6 text-xs text-muted-foreground">
+                              {item.source === "copied" ? (
+                                <>
+                                  {item.hasOverride ? (
+                                    <>
+                                      <span className="truncate">{item.overrideFilterName}</span>
+                                      <Badge variant="outline" className="text-[9px] shrink-0">
+                                        {item.overrideFilterType === "include" ? "Include" : "Exclude"}
+                                      </Badge>
+                                      <Badge variant="secondary" className="text-[9px] shrink-0">Modified</Badge>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5 shrink-0"
+                                        onClick={() => handleClearCopiedFilter(item.id)}
+                                        data-testid={`filter-revert-${item.id}`}
+                                      >
+                                        <XCircle className="h-3 w-3" />
+                                      </Button>
+                                    </>
+                                  ) : item.isRemoved ? (
+                                    <>
+                                      <span className="italic line-through">{item.currentFilterName}</span>
+                                      <Badge variant="destructive" className="text-[9px] shrink-0">Removed</Badge>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5 shrink-0"
+                                        onClick={() => setRemovedCopiedFilters((prev) => { const next = new Set(prev); next.delete(item.id); return next; })}
+                                        data-testid={`filter-undo-remove-${item.id}`}
+                                      >
+                                        <RotateCcw className="h-3 w-3" />
+                                      </Button>
+                                    </>
+                                  ) : item.currentFilterName ? (
+                                    <>
+                                      <span className="truncate">{item.currentFilterName}</span>
+                                      {item.currentFilterType && item.currentFilterType !== "none" && (
+                                        <Badge variant="outline" className="text-[9px] shrink-0">
+                                          {item.currentFilterType === "include" ? "Include" : "Exclude"}
+                                        </Badge>
+                                      )}
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5 shrink-0"
+                                        onClick={() => handleRemoveCopiedFilter(item.id)}
+                                        data-testid={`filter-remove-${item.id}`}
+                                      >
+                                        <XCircle className="h-3 w-3" />
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <CopiedFilterPicker
+                                      assignmentId={item.id}
+                                      onSelect={(fId, fName, fType) => handleSetCopiedFilter(item.id, fId, fName, fType)}
+                                    />
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  {item.currentFilterName ? (
+                                    <>
+                                      <span className="truncate">{item.currentFilterName}</span>
+                                      <Badge variant="outline" className="text-[9px] shrink-0">
+                                        {item.currentFilterType === "include" ? "Include" : "Exclude"}
+                                      </Badge>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5 shrink-0"
+                                        onClick={() => handleClearFilter(item.id)}
+                                        data-testid={`filter-clear-extra-${item.id}`}
+                                      >
+                                        <XCircle className="h-3 w-3" />
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <CopiedFilterPicker
+                                      assignmentId={item.id}
+                                      onSelect={(fId, fName, fType) => handleSetFilter(item.id, fId, fName, fType)}
+                                    />
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
