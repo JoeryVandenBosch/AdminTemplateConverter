@@ -483,8 +483,7 @@ function CopiedFilterPicker({ assignmentId, onSelect }: {
               <Loader2 className="h-3 w-3 animate-spin" /> Loading filters...
             </div>
           ) : filters && filters.length > 0 ? (
-            <ScrollArea className="max-h-[120px]">
-              <div className="space-y-1">
+            <div className="max-h-[150px] overflow-y-auto space-y-1">
                 {filters.map((f) => (
                   <div
                     key={f.id}
@@ -504,8 +503,7 @@ function CopiedFilterPicker({ assignmentId, onSelect }: {
                     </div>
                   </div>
                 ))}
-              </div>
-            </ScrollArea>
+            </div>
           ) : (
             <p className="text-xs text-muted-foreground italic p-1">No assignment filters found in tenant</p>
           )}
