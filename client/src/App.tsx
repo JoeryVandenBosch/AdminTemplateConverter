@@ -4,7 +4,6 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 
@@ -22,12 +21,7 @@ function App() {
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <div className="relative min-h-screen">
-            <div className="fixed top-3 right-4 z-50">
-              <ThemeToggle />
-            </div>
-            <Router />
-          </div>
+          <Router />
           <Toaster />
         </TooltipProvider>
       </QueryClientProvider>

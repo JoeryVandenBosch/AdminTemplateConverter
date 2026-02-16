@@ -7,6 +7,7 @@ import {
   getPolicyAssignments,
   findMatchingSettingDefinition,
   createSettingsCatalogPolicy,
+  assignSettingsCatalogPolicy,
   buildSettingsCatalogSetting,
 } from "./graphClient";
 import { convertPolicySchema } from "@shared/schema";
@@ -65,7 +66,8 @@ export async function registerRoutes(
         });
       }
 
-      const { policyId, newName, newDescription } = parsed.data;
+      const { policyId, newName, newDescription, includeAssignments } =
+        parsed.data;
 
       log(`Starting conversion for policy ${policyId}`, "routes");
 
@@ -99,15 +101,16 @@ export async function registerRoutes(
         }
 
         try {
-          const matchedDef = await findMatchingSettingDefinition(
+          const matchResult = await findMatchingSettingDefinition(
             definition.displayName,
             definition.categoryPath || "",
-            definition.classType || "machine"
+            definition.classType || "machine",
+            definition.definitionFile
           );
 
-          if (matchedDef) {
+          if (matchResult) {
             const catalogSetting = buildSettingsCatalogSetting(
-              matchedDef.id || matchedDef.settingDefinitionId,
+              matchResult.definition,
               setting.enabled,
               setting.presentationValues || []
             );
@@ -117,7 +120,9 @@ export async function registerRoutes(
               categoryPath: definition.categoryPath || "Unknown",
               status: "converted",
               mappedDefinitionId:
-                matchedDef.id || matchedDef.settingDefinitionId,
+                matchResult.definition.id ||
+                matchResult.definition.settingDefinitionId,
+              originalValue: setting.enabled ? "Enabled" : "Disabled",
             });
           } else {
             conversionDetails.push({
@@ -153,7 +158,7 @@ export async function registerRoutes(
           failedSettings: settings.length,
           details: conversionDetails,
           error:
-            "No settings could be mapped to Settings Catalog definitions.",
+            "No settings could be mapped to Settings Catalog definitions. The settings may need to be mapped manually in the Intune portal.",
         });
       }
 
@@ -169,6 +174,30 @@ export async function registerRoutes(
           "routes"
         );
 
+        if (includeAssignments && newPolicy.id) {
+          try {
+            const sourceAssignments = await getPolicyAssignments(policyId);
+            if (sourceAssignments.length > 0) {
+              const mappedAssignments = sourceAssignments.map((a: any) => ({
+                target: a.target,
+              }));
+              await assignSettingsCatalogPolicy(
+                newPolicy.id,
+                mappedAssignments
+              );
+              log(
+                `Copied ${mappedAssignments.length} assignments to new policy`,
+                "routes"
+              );
+            }
+          } catch (assignErr: any) {
+            log(
+              `Failed to copy assignments: ${assignErr.message}`,
+              "routes"
+            );
+          }
+        }
+
         const status = failedCount === 0 ? "success" : "partial";
 
         return res.json({
@@ -181,7 +210,10 @@ export async function registerRoutes(
           details: conversionDetails,
         });
       } catch (err: any) {
-        log(`Failed to create Settings Catalog policy: ${err.message}`, "routes");
+        log(
+          `Failed to create Settings Catalog policy: ${err.message}`,
+          "routes"
+        );
         return res.json({
           policyName: newName,
           status: "failed",

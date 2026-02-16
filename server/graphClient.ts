@@ -106,15 +106,26 @@ export async function getTenantInfo(): Promise<{
   error?: string;
 }> {
   try {
-    const data = await graphRequest(
-      "https://graph.microsoft.com/v1.0/organization"
-    );
-    const org = data.value?.[0];
-    return {
-      connected: true,
-      tenantId: org?.id,
-      displayName: org?.displayName,
-    };
+    await getAccessToken();
+    const tenantId = process.env.AZURE_TENANT_ID;
+
+    try {
+      const data = await graphRequest(
+        "https://graph.microsoft.com/v1.0/organization"
+      );
+      const org = data.value?.[0];
+      return {
+        connected: true,
+        tenantId: org?.id || tenantId,
+        displayName: org?.displayName,
+      };
+    } catch {
+      return {
+        connected: true,
+        tenantId: tenantId,
+        displayName: tenantId,
+      };
+    }
   } catch (error: any) {
     return {
       connected: false,
@@ -167,9 +178,21 @@ export async function getPolicySettings(policyId: string): Promise<any[]> {
           ),
         ]);
 
+        let definitionFile = null;
+        try {
+          definitionFile = await graphRequest(
+            `${GRAPH_BASE_URL}/deviceManagement/groupPolicyDefinitions/${definition.id}/definitionFile`
+          );
+        } catch {
+          log(`Could not fetch definition file for ${definition.id}`, "graph");
+        }
+
         return {
           ...defValue,
-          definition,
+          definition: {
+            ...definition,
+            definitionFile,
+          },
           presentationValues,
         };
       } catch (err: any) {
@@ -205,9 +228,9 @@ export async function searchSettingsCatalogDefinitions(
   searchTerm: string
 ): Promise<any[]> {
   try {
-    const encodedSearch = encodeURIComponent(searchTerm);
+    const cleanTerm = searchTerm.replace(/'/g, "''");
     const data = await graphRequest(
-      `${GRAPH_BASE_URL}/deviceManagement/configurationSettings?$filter=contains(displayName,'${encodedSearch}')&$top=20`
+      `${GRAPH_BASE_URL}/deviceManagement/configurationSettings?$filter=contains(displayName,'${encodeURIComponent(cleanTerm)}')&$top=50`
     );
     return data.value || [];
   } catch (err: any) {
@@ -219,11 +242,29 @@ export async function searchSettingsCatalogDefinitions(
   }
 }
 
+export async function getSettingDefinitionDetails(
+  settingDefinitionId: string
+): Promise<any | null> {
+  try {
+    const data = await graphRequest(
+      `${GRAPH_BASE_URL}/deviceManagement/configurationSettings('${encodeURIComponent(settingDefinitionId)}')`
+    );
+    return data;
+  } catch (err: any) {
+    log(
+      `Failed to get definition details for ${settingDefinitionId}: ${err.message}`,
+      "graph"
+    );
+    return null;
+  }
+}
+
 export async function findMatchingSettingDefinition(
   displayName: string,
   categoryPath: string,
-  classType: string
-): Promise<any | null> {
+  classType: string,
+  definitionFile?: any
+): Promise<{ definition: any; confidence: "high" | "medium" | "low" } | null> {
   try {
     const cleanName = displayName.replace(/['"]/g, "");
 
@@ -234,9 +275,30 @@ export async function findMatchingSettingDefinition(
         (r: any) =>
           r.displayName?.toLowerCase() === cleanName.toLowerCase()
       );
-      if (exactMatch) return exactMatch;
+      if (exactMatch) {
+        return { definition: exactMatch, confidence: "high" };
+      }
 
-      return results[0];
+      const scopePrefix = classType === "user" ? "user_" : "device_";
+      const scopeMatches = results.filter(
+        (r: any) =>
+          r.id?.toLowerCase().startsWith(scopePrefix) ||
+          r.settingDefinitionId?.toLowerCase().startsWith(scopePrefix)
+      );
+
+      if (scopeMatches.length > 0) {
+        const nameMatch = scopeMatches.find(
+          (r: any) =>
+            r.displayName?.toLowerCase().includes(cleanName.toLowerCase()) ||
+            cleanName.toLowerCase().includes(r.displayName?.toLowerCase() || "")
+        );
+        if (nameMatch) {
+          return { definition: nameMatch, confidence: "medium" };
+        }
+        return { definition: scopeMatches[0], confidence: "low" };
+      }
+
+      return { definition: results[0], confidence: "low" };
     }
 
     const pathParts = categoryPath.split("\\").filter(Boolean);
@@ -248,7 +310,23 @@ export async function findMatchingSettingDefinition(
         (r: any) =>
           r.displayName?.toLowerCase().includes(cleanName.toLowerCase())
       );
-      if (categoryMatch) return categoryMatch;
+      if (categoryMatch) {
+        return { definition: categoryMatch, confidence: "medium" };
+      }
+    }
+
+    if (definitionFile?.fileName) {
+      const admxName = definitionFile.fileName
+        .replace(/\.admx$/i, "")
+        .toLowerCase();
+      const admxResults = await searchSettingsCatalogDefinitions(admxName);
+      const admxMatch = admxResults.find(
+        (r: any) =>
+          r.displayName?.toLowerCase().includes(cleanName.toLowerCase())
+      );
+      if (admxMatch) {
+        return { definition: admxMatch, confidence: "medium" };
+      }
     }
 
     return null;
@@ -285,24 +363,44 @@ export async function createSettingsCatalogPolicy(
   );
 }
 
+export async function assignSettingsCatalogPolicy(
+  policyId: string,
+  assignments: any[]
+): Promise<void> {
+  await graphRequest(
+    `${GRAPH_BASE_URL}/deviceManagement/configurationPolicies/${policyId}/assign`,
+    "POST",
+    { assignments }
+  );
+}
+
 export function buildSettingsCatalogSetting(
-  settingDefinitionId: string,
+  matchedDefinition: any,
   enabled: boolean,
   presentationValues: any[]
 ): any {
+  const settingDefId =
+    matchedDefinition.id ||
+    matchedDefinition.settingDefinitionId;
+
   const children: any[] = [];
+
+  const options = matchedDefinition.options || matchedDefinition.choiceSettingOptions || [];
+  const optionValues = options.map((o: any) => o.itemId || o.value || o.name);
 
   for (const pv of presentationValues) {
     const odataType = pv["@odata.type"] || "";
+    const label = pv.presentation?.label || "value";
+    const childId = `${settingDefId}_${label.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
 
     if (
-      odataType.includes("groupPolicyPresentationValueText") ||
-      odataType.includes("Text")
+      odataType.includes("Text") ||
+      odataType.includes("groupPolicyPresentationValueText")
     ) {
       children.push({
         "@odata.type":
           "#microsoft.graph.deviceManagementConfigurationSimpleSettingInstance",
-        settingDefinitionId: `${settingDefinitionId}_${(pv.presentation?.label || "value").toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
+        settingDefinitionId: childId,
         simpleSettingValue: {
           "@odata.type":
             "#microsoft.graph.deviceManagementConfigurationStringSettingValue",
@@ -310,13 +408,15 @@ export function buildSettingsCatalogSetting(
         },
       });
     } else if (
+      odataType.includes("Decimal") ||
+      odataType.includes("LongDecimal") ||
       odataType.includes("groupPolicyPresentationValueDecimal") ||
-      odataType.includes("Decimal")
+      odataType.includes("groupPolicyPresentationValueLongDecimal")
     ) {
       children.push({
         "@odata.type":
           "#microsoft.graph.deviceManagementConfigurationSimpleSettingInstance",
-        settingDefinitionId: `${settingDefinitionId}_${(pv.presentation?.label || "value").toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
+        settingDefinitionId: childId,
         simpleSettingValue: {
           "@odata.type":
             "#microsoft.graph.deviceManagementConfigurationIntegerSettingValue",
@@ -324,41 +424,81 @@ export function buildSettingsCatalogSetting(
         },
       });
     } else if (
-      odataType.includes("groupPolicyPresentationValueBoolean") ||
-      odataType.includes("Boolean")
+      odataType.includes("Boolean") ||
+      odataType.includes("groupPolicyPresentationValueBoolean")
     ) {
       children.push({
         "@odata.type":
           "#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance",
-        settingDefinitionId: `${settingDefinitionId}_${(pv.presentation?.label || "value").toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
+        settingDefinitionId: childId,
         choiceSettingValue: {
-          value: pv.value
-            ? `${settingDefinitionId}_true`
-            : `${settingDefinitionId}_false`,
+          "@odata.type":
+            "#microsoft.graph.deviceManagementConfigurationChoiceSettingValue",
+          value: pv.value ? `${childId}_true` : `${childId}_false`,
         },
       });
     } else if (
-      odataType.includes("groupPolicyPresentationValueList") ||
-      odataType.includes("List")
+      odataType.includes("List") ||
+      odataType.includes("groupPolicyPresentationValueList")
     ) {
-      if (pv.values && Array.isArray(pv.values)) {
+      const listValues = pv.values || [];
+      if (Array.isArray(listValues)) {
         children.push({
           "@odata.type":
             "#microsoft.graph.deviceManagementConfigurationSimpleSettingCollectionInstance",
-          settingDefinitionId: `${settingDefinitionId}_${(pv.presentation?.label || "list").toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
-          simpleSettingCollectionValue: pv.values.map((v: any) => ({
+          settingDefinitionId: childId,
+          simpleSettingCollectionValue: listValues.map((v: any) => ({
             "@odata.type":
               "#microsoft.graph.deviceManagementConfigurationStringSettingValue",
             value: String(v.name || v),
           })),
         });
       }
+    } else if (
+      odataType.includes("MultiText") ||
+      odataType.includes("groupPolicyPresentationValueMultiText")
+    ) {
+      const multiValues = pv.values || [];
+      if (Array.isArray(multiValues)) {
+        children.push({
+          "@odata.type":
+            "#microsoft.graph.deviceManagementConfigurationSimpleSettingCollectionInstance",
+          settingDefinitionId: childId,
+          simpleSettingCollectionValue: multiValues.map((v: any) => ({
+            "@odata.type":
+              "#microsoft.graph.deviceManagementConfigurationStringSettingValue",
+            value: String(v),
+          })),
+        });
+      }
     }
   }
 
-  const enabledValue = enabled
-    ? `${settingDefinitionId}_1`
-    : `${settingDefinitionId}_0`;
+  let enabledValue: string;
+  if (options.length > 0) {
+    const enabledOption = options.find(
+      (o: any) =>
+        (o.displayName || o.name || "").toLowerCase() === "enabled" ||
+        (o.itemId || o.value || "").endsWith("_1") ||
+        (o.itemId || o.value || "").endsWith("_enabled")
+    );
+    const disabledOption = options.find(
+      (o: any) =>
+        (o.displayName || o.name || "").toLowerCase() === "disabled" ||
+        (o.itemId || o.value || "").endsWith("_0") ||
+        (o.itemId || o.value || "").endsWith("_disabled")
+    );
+
+    if (enabled && enabledOption) {
+      enabledValue = enabledOption.itemId || enabledOption.value;
+    } else if (!enabled && disabledOption) {
+      enabledValue = disabledOption.itemId || disabledOption.value;
+    } else {
+      enabledValue = enabled ? `${settingDefId}_1` : `${settingDefId}_0`;
+    }
+  } else {
+    enabledValue = enabled ? `${settingDefId}_1` : `${settingDefId}_0`;
+  }
 
   return {
     "@odata.type":
@@ -366,7 +506,7 @@ export function buildSettingsCatalogSetting(
     settingInstance: {
       "@odata.type":
         "#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance",
-      settingDefinitionId,
+      settingDefinitionId: settingDefId,
       choiceSettingValue: {
         "@odata.type":
           "#microsoft.graph.deviceManagementConfigurationChoiceSettingValue",

@@ -1,9 +1,10 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -44,8 +45,8 @@ import {
   Clock,
   Zap,
   Info,
-  CircleDot,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type {
   AdminTemplatePolicy,
   DefinitionValue,
@@ -285,6 +286,7 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
   const [newDescription, setNewDescription] = useState(
     policy.description || ""
   );
+  const [includeAssignments, setIncludeAssignments] = useState(false);
   const [result, setResult] = useState<ConversionResult | null>(null);
 
   const convertMutation = useMutation({
@@ -293,6 +295,7 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
         policyId: policy.id,
         newName,
         newDescription,
+        includeAssignments,
       });
       return (await res.json()) as ConversionResult;
     },
@@ -368,6 +371,23 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                 placeholder="Enter a description"
                 data-testid="input-new-description"
               />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="includeAssignments"
+                checked={includeAssignments}
+                onCheckedChange={(checked) =>
+                  setIncludeAssignments(checked === true)
+                }
+                data-testid="checkbox-include-assignments"
+              />
+              <label
+                htmlFor="includeAssignments"
+                className="text-sm cursor-pointer"
+              >
+                Copy group assignments to the new policy
+              </label>
             </div>
 
             <Card className="bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
@@ -601,8 +621,7 @@ export default function Dashboard() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2" id="header-actions">
-            </div>
+            <ThemeToggle />
           </div>
         </div>
       </header>
