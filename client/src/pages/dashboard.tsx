@@ -760,8 +760,8 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
 
       {!result ? (
         <>
-          <ScrollArea className="flex-1 min-h-0 max-h-[60vh]">
-            <div className="space-y-4 py-2 pr-3">
+          <div className="flex-1 min-h-0 max-h-[65vh] overflow-y-auto pr-1">
+            <div className="space-y-4 py-2 pr-2">
               <div className="space-y-2">
                 <label className="text-sm font-medium" htmlFor="newName">
                   New Policy Name
@@ -1244,7 +1244,7 @@ function ConversionDialog({ policy, onClose }: ConversionDialogProps) {
                 </CardContent>
               </Card>
             </div>
-          </ScrollArea>
+          </div>
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={onClose} disabled={isConverting} data-testid="button-cancel-convert">
