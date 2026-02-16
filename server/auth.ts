@@ -270,18 +270,23 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const token = authHeader.substring(7);
+    console.log(`[Auth] Bearer token received for ${req.method} ${req.path}`);
     fetch("https://graph.microsoft.com/v1.0/me", {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((graphRes) => {
+      .then(async (graphRes) => {
         if (graphRes.ok) {
+          console.log(`[Auth] Bearer token validated successfully for ${req.path}`);
           (req as any).bearerToken = token;
           next();
         } else {
+          const body = await graphRes.text().catch(() => "");
+          console.error(`[Auth] Bearer token validation failed (${graphRes.status}) for ${req.path}: ${body}`);
           res.status(401).json({ message: "Invalid or expired Bearer token." });
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error(`[Auth] Token validation error for ${req.path}:`, err);
         res.status(401).json({ message: "Token validation failed." });
       });
     return;
